@@ -119,10 +119,6 @@
             </div>
         </div>
     </section>
-<<<<<<< HEAD
-=======
-    
->>>>>>> 2a548abd798e357264ae261d893a02e31d3fd681
     {{-- Dynamic Search While Typing --}}
     <script>
         document.getElementById("searchInput").addEventListener("keyup", function() {
