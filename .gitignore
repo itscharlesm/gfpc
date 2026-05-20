@@ -1,0 +1,29 @@
+# ===== ROOT =====
+.env
+*.log
+
+# ===== LARAVEL (web) =====
+/web/vendor
+/web/node_modules
+/web/.env
+/web/storage
+/web/bootstrap/cache
+/web/public/images
+/web/public/public.zip
+/web/public/images.zip
+/web/public/storage
+
+# ===== FLUTTER (mobile) =====
+/mobile/.dart_tool/
+/mobile/.flutter-plugins
+/mobile/.flutter-plugins-dependencies
+/mobile/build/
+/mobile/.packages
+/mobile/.pub-cache/
+/mobile/.env
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.iml
