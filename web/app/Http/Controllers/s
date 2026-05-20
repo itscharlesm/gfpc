@@ -488,7 +488,12 @@ public function assessed_appointments_view($svc_id)
 
 help me with assessed_appointments_view_assign, we just update in the table
 
+services
+svc_id = connect
+svc_status = 'SCHEDULED'
+
 service_appointments
+svc_id = connect
 svca_status = 'ASSIGNED'
 svca_date_modified = Carbon::now(),
 svca_modified_by = session('usr_id')
@@ -502,3 +507,11 @@ svcas_date_assigned = Carbon::now(),
 svcas_date_created = Carbon::now(),
 svcas_created_by = session('usr_id'),
 svcas_active = 1
+
+logUserActivity('Manage Appointments', 'Assigned Technician ' . $serviceOrder);
+
+    session()->flash('successMessage', 'Assigned technician successfully.');
+    return redirect()->action(
+        [AppointmentController::class, 'scheduled_appointments_view'],
+        ['svc_id' => $svc_id]
+    );

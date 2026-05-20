@@ -439,7 +439,7 @@
     <div class="modal fade" id="assignTechnicianModal" tabindex="-1" role="dialog"
         aria-labelledby="assignTechnicianModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-xl" role="document">
-            <form action="{{ url('management/service-orders/assign-technician') }}" method="POST">
+            <form action="{{ url('service/orders/appointments/assessed/assign') }}" method="POST">
                 @csrf
                 <div class="modal-content">
                     <div class="modal-header bg-success text-white">

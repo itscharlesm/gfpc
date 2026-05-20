@@ -1209,7 +1209,273 @@ class AppointmentController extends Controller
 
         return view('service_orders.appointments.assessed.view_assessed', compact('display', 'pestTypes', 'serviceAreas', 'termiteAreas', 'appointmentImages', 'technicians', 'approvedDate', 'approvedTimeFrom', 'approvedTimeTo', 'daySchedules', 'allTechs'));
     }
+
+    public function assessed_appointments_view_assign(Request $request)
+    {
+        $request->validate([
+            'svc_id' => 'required',
+            'svcas_assigned_to' => 'required',
+        ]);
+
+        $svc_id = $request->svc_id;
+
+        // Get the svca_id for this service
+        $appointment = DB::table('service_appointments')
+            ->where('svc_id', $svc_id)
+            ->first();
+
+        DB::table('services')
+            ->where('svc_id', $svc_id)
+            ->update([
+                'svc_status' => 'SCHEDULED',
+            ]);
+
+        DB::table('service_appointments')
+            ->where('svc_id', $svc_id)
+            ->update([
+                'svca_status' => 'ASSIGNED',
+                'svca_date_modified' => Carbon::now(),
+                'svca_modified_by' => session('usr_id'),
+            ]);
+
+        DB::table('service_appointment_schedules')
+            ->insert([
+                'svcas_uuid' => (string) \Illuminate\Support\Str::uuid(),
+                'svca_id' => $appointment->svca_id,
+                'svcas_assigned_to' => $request->svcas_assigned_to,
+                'svcas_assigned_by' => session('usr_id'),
+                'svcas_date_assigned' => Carbon::now(),
+                'svcas_date_created' => Carbon::now(),
+                'svcas_created_by' => session('usr_id'),
+                'svcas_active' => 1,
+            ]);
+
+        $serviceOrder = 'SA-' . str_pad($svc_id, 6, '0', STR_PAD_LEFT);
+
+        logUserActivity('Manage Appointments', 'Assigned Technician ' . $serviceOrder);
+
+        session()->flash('successMessage', 'Assigned technician successfully.');
+        return redirect()->action(
+            [AppointmentController::class, 'scheduled_appointments_view'],
+            ['svc_id' => $svc_id]
+        );
+    }
     // END ASSESSED APPOINTMENTS
+
+    // START SCHEDULED APPOINTMENTS
+    public function scheduled_appointments_view($svc_id)
+    {
+        $display = DB::table('services')
+            ->leftJoin('users', 'services.usr_id', '=', 'users.usr_id')
+            ->leftJoin('branches', 'services.branch_id', '=', 'branches.branch_id')
+            ->leftJoin('service_appointments', 'services.svc_id', '=', 'service_appointments.svc_id')
+            ->leftJoin('user_addresses', 'service_appointments.uadd_id', '=', 'user_addresses.uadd_id')
+            ->leftJoin('addresses', 'user_addresses.add_id', '=', 'addresses.add_id')
+            ->leftJoin('users as approver', 'service_appointments.svca_approved_by', '=', 'approver.usr_id')
+            ->where('services.svc_id', $svc_id)
+            ->select(
+                'services.svc_id',
+                'services.svc_sa_number',
+                'services.svc_km_distance',
+                'services.svc_property_type',
+                'services.svc_is_package',
+                'services.svcpat_id',
+                'services.svc_is_termite',
+                'services.svc_type_treatment',
+                'services.svc_sqm_initial',
+                'services.svc_sqm_final',
+                'services.svc_with_device',
+                'services.svc_device_count',
+                'services.svc_problem_description',
+                'services.svc_status',
+                'services.svc_infestation',
+                'services.svc_initial_price',
+                'services.svc_location_price',
+                'services.svc_device_price',
+                'services.svc_fixed_price',
+                'services.svc_final_price',
+                'services.svc_balance',
+                'services.svc_payment_status',
+                'services.svc_assessment_recommendation',
+                'services.svc_chemical_quantity',
+                'services.svc_chemical_metric',
+                'users.usr_first_name',
+                'users.usr_last_name',
+                'users.usr_email',
+                'users.usr_mobile',
+                'branches.branch_id',
+                'branches.branch_name',
+                'service_appointments.svca_client_date',
+                'service_appointments.svca_client_time',
+                'service_appointments.svca_approved_date',
+                'service_appointments.svca_approved_time_from',
+                'service_appointments.svca_approved_time_to',
+                'service_appointments.svca_date_approved',
+                'approver.usr_first_name as approved_first_name',
+                'approver.usr_last_name as approved_last_name',
+                'user_addresses.uadd_street',
+                'user_addresses.uadd_barangay',
+                'user_addresses.uadd_city',
+                'user_addresses.uadd_province',
+                'user_addresses.uadd_region',
+                'addresses.add_name'
+            )
+            ->first();
+
+        // Pest Types for this service
+        $pestTypes = DB::table('service_order_pests')
+            ->leftJoin('service_packages', 'service_order_pests.svcp_id', '=', 'service_packages.svcp_id')
+            ->where('service_order_pests.svc_id', $svc_id)
+            ->where('service_order_pests.svcop_active', 1)
+            ->select(
+                'service_order_pests.svcop_id',
+                'service_packages.svcp_id',
+                'service_packages.svcp_pest_type'
+            )
+            ->get();
+
+        // Service Orders with Areas (non-termite: svcpat_id IS NULL)
+        $serviceAreas = DB::table('service_orders')
+            ->leftJoin('service_package_areas', 'service_orders.svcpa_id', '=', 'service_package_areas.svcpa_id')
+            ->where('service_orders.svc_id', $svc_id)
+            ->whereNull('service_orders.svcpat_id')
+            ->where('service_orders.svco_active', 1)
+            ->select(
+                'service_orders.svco_id',
+                'service_package_areas.svcpa_id',
+                'service_package_areas.svcpa_area',
+                'service_package_areas.svcpa_cost'
+            )
+            ->get();
+
+        // Service Orders with Termite Areas (termite: svcpat_id IS NOT NULL)
+        $termiteAreas = DB::table('service_orders')
+            ->leftJoin('service_package_area_termites', 'service_orders.svcpat_id', '=', 'service_package_area_termites.svcpat_id')
+            ->where('service_orders.svc_id', $svc_id)
+            ->whereNotNull('service_orders.svcpat_id')
+            ->where('service_orders.svco_active', 1)
+            ->select(
+                'service_orders.svco_id',
+                'service_package_area_termites.svcpat_id',
+                'service_package_area_termites.svcpat_sqm_details',
+                'service_package_area_termites.svcpat_cost'
+            )
+            ->get();
+
+        // Client Appointment Images
+        $appointmentImages = DB::table('service_appointment_images')
+            ->join('service_appointments', 'service_appointment_images.svca_id', '=', 'service_appointments.svca_id')
+            ->where('service_appointments.svc_id', $svc_id)
+            ->where('service_appointment_images.svcap_active', 1)
+            ->select('service_appointment_images.*')
+            ->get();
+
+        $approvedDate = null;
+        $approvedTimeFrom = null;
+        $approvedTimeTo = null;
+
+        $appointment = DB::table('service_appointments')
+            ->where('svc_id', $svc_id)
+            ->first();
+
+        if ($appointment) {
+            $approvedDate = $appointment->svca_approved_date;
+            $approvedTimeFrom = $appointment->svca_approved_time_from;
+            $approvedTimeTo = $appointment->svca_approved_time_to;
+        }
+
+        // Day-of-week name from approved date (MONDAY, TUESDAY, etc.)
+        $dayName = $approvedDate
+            ? strtoupper(Carbon::parse($approvedDate)->format('l'))
+            : null;
+
+        // Technicians
+        $technicians = DB::table('users')
+            ->where('utyp_id', 2)
+            ->where('usr_active', 1)
+            ->where('branch_id', $display->branch_id)
+            ->orderBy('usr_last_name', 'asc')
+            ->select('usr_id', 'usr_first_name', 'usr_last_name')
+            ->get()
+            ->map(function ($tech) use ($dayName, $approvedDate, $approvedTimeFrom, $approvedTimeTo) {
+                // Check rest day
+                $isRestDay = false;
+                if ($dayName) {
+                    $avail = DB::table('user_availabilities')
+                        ->where('usr_id', $tech->usr_id)
+                        ->where('uavail_name', $dayName)
+                        ->first();
+                    $isRestDay = !$avail || $avail->uavail_active == 0;
+                }
+
+                // Check existing assignments that overlap
+                $isBusy = false;
+                if ($approvedDate && $approvedTimeFrom && $approvedTimeTo) {
+                    $conflict = DB::table('service_appointment_schedules')
+                        ->join('service_appointments', 'service_appointments.svca_id', '=', 'service_appointment_schedules.svca_id')
+                        ->where('service_appointment_schedules.svcas_assigned_to', $tech->usr_id)
+                        ->where('service_appointment_schedules.svcas_active', 1)
+                        ->where('service_appointments.svca_approved_date', $approvedDate)
+                        ->where('service_appointments.svca_approved_time_from', '<', $approvedTimeTo)
+                        ->where('service_appointments.svca_approved_time_to', '>', $approvedTimeFrom)
+                        ->first();
+                    $isBusy = (bool) $conflict;
+                }
+
+                $tech->is_rest_day = $isRestDay;
+                $tech->is_busy = $isBusy;
+                return $tech;
+            });
+
+        // Existing schedules for the timeline (all techs, same date)
+        $daySchedules = [];
+        if ($approvedDate) {
+            $rows = DB::table('service_appointment_schedules')
+                ->join('service_appointments', 'service_appointments.svca_id', '=', 'service_appointment_schedules.svca_id')
+                ->join('services', 'services.svc_id', '=', 'service_appointments.svc_id')
+                ->join('users as clients', 'clients.usr_id', '=', 'services.usr_id')
+                ->leftJoin('user_addresses', 'service_appointments.uadd_id', '=', 'user_addresses.uadd_id')
+                ->leftJoin('users as assigner', 'assigner.usr_id', '=', 'service_appointment_schedules.svcas_assigned_by')
+                ->where('service_appointment_schedules.svcas_active', 1)
+                ->where('service_appointments.svca_approved_date', $approvedDate)
+                ->select(
+                    'service_appointment_schedules.svcas_assigned_to',
+                    'service_appointment_schedules.svcas_date_assigned',
+                    'service_appointment_schedules.svcas_assigned_by',
+                    'assigner.usr_first_name as assigner_first_name',
+                    'assigner.usr_last_name as assigner_last_name',
+                    'service_appointments.svca_approved_time_from',
+                    'service_appointments.svca_approved_time_to',
+                    'clients.usr_first_name',
+                    'clients.usr_last_name',
+                    'clients.usr_email',
+                    'clients.usr_mobile',
+                    'user_addresses.uadd_street',
+                    'user_addresses.uadd_barangay',
+                    'user_addresses.uadd_city',
+                    'user_addresses.uadd_province',
+                    'user_addresses.uadd_region',
+                    'services.svc_km_distance'
+                )
+                ->get();
+
+            foreach ($rows as $row) {
+                $daySchedules[$row->svcas_assigned_to][] = $row;
+            }
+        }
+
+        $allTechs = $technicians->map(function ($t) {
+            return [
+                'id' => $t->usr_id,
+                'label' => $t->usr_last_name . ', ' . substr($t->usr_first_name, 0, 1) . '.',
+                'is_rest' => $t->is_rest_day,
+                'is_busy' => $t->is_busy,
+            ];
+        })->values();
+
+        return view('service_orders.appointments.scheduled.view_scheduled', compact('display', 'pestTypes', 'serviceAreas', 'termiteAreas', 'appointmentImages', 'technicians', 'approvedDate', 'approvedTimeFrom', 'approvedTimeTo', 'daySchedules', 'allTechs'));
+    }
+    // END SCHEDULED APPOINTMENTS
 
     // START DELETED APPOINTMENTS
     public function delete_appointment(Request $request, $svc_id)
@@ -1245,10 +1511,4 @@ class AppointmentController extends Controller
         session()->flash('successMessage', 'Appointment has been deleted.');
         return redirect()->back();
     }
-    // END DELETED APPOINTMENTSS
-    // END DELETED APPOINTMENTSS
-    // END DELETED APPOINTMENTSS
-    // END DELETED APPOINTMENTSS
-    // END DELETED APPOINTMENTSS
-    // END DELETED APPOINTMENTSS
 }
