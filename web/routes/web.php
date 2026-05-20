@@ -103,6 +103,7 @@ Route::post('service/orders/appointments/requested/assess/confirmation', [Appoin
 // - Assesed Appointments
 Route::get('service/orders/appointments/assessed', [AppointmentController::class, 'assessed_appointments']);
 Route::get('service/orders/appointments/assessed/{svc_id}', [AppointmentController::class, 'assessed_appointments_view']);
+Route::get('service/orders/appointments/assessed/assign', [AppointmentController::class, 'assessed_appointments_view_assign']);
 // - Scheduled Appointments
 // - Ongoing Appointments
 // - Completed Appointments

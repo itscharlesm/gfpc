@@ -248,7 +248,7 @@
                         <div class="d-flex justify-content-end flex-wrap mb-3 no-print">
                             <button type="button" class="btn btn-success mr-2 mb-2" data-toggle="modal"
                                 data-target="#assignTechnicianModal">
-                                <span class="fa fa-user"></span> Assign Technician
+                                <span class="fa fa-user-plus"></span> Assign Technician
                             </button>
                             <button type="button" class="btn btn-primary mr-2 mb-2" onclick="printDefault()">
                                 <span class="fa fa-print"></span> Print
@@ -711,12 +711,34 @@
                     const dispTo = Math.min(evTo, HOURS_END);
                     if (dispFrom >= dispTo) return;
 
-                    const contactParts = [ev.usr_email, '0' + ev.usr_mobile].filter(p => p && p.trim());
-                    const addressParts = [ev.uadd_street, ev.uadd_barangay, ev.uadd_city, ev.uadd_province, ev
+                    const contactParts = ['Email: ' + ev.usr_email, 'Number: 0' + ev.usr_mobile].filter(p =>
+                        p && p.trim());
+                    const addressParts = ['Address: ' + ev.uadd_street, ev.uadd_barangay, ev.uadd_city, ev
+                        .uadd_province, ev
                         .uadd_region
                     ].filter(p => p && p.trim());
-                    const distanceLine = ev.svc_km_distance ? ev.svc_km_distance + 'KM from office' : null;
-                    const addr = [...contactParts, ...addressParts, distanceLine].filter(Boolean).join(', ');
+                    const distanceLine = ev.svc_km_distance ? 'Distance: ' + ev.svc_km_distance +
+                        'KM from office' : null;
+                    let dateAssignedLine = null;
+                    if (ev.svcas_date_assigned) {
+                        const d = new Date(ev.svcas_date_assigned);
+                        const mm = String(d.getMonth() + 1).padStart(2, '0');
+                        const dd = String(d.getDate()).padStart(2, '0');
+                        const yyyy = d.getFullYear();
+                        dateAssignedLine = 'Date Assigned: ' + mm + '/' + dd + '/' + yyyy;
+                    }
+
+                    const assignedByLine = (ev.assigner_first_name && ev.assigner_last_name) ?
+                        'Assigned By: ' + ev.assigner_first_name + ' ' + ev.assigner_last_name :
+                        null;
+
+                    const addr = [
+                        ...contactParts,
+                        addressParts.join(', '),
+                        distanceLine,
+                        dateAssignedLine,
+                        assignedByLine
+                    ].filter(Boolean).join('<br>');
 
                     const blk = makeBlock(dispFrom, dispTo,
                         ev.usr_first_name + ' ' + ev.usr_last_name, addr,
@@ -874,19 +896,55 @@
                         const dT = Math.min(evTo, HOURS_END);
                         if (dF >= dT) return;
 
-                        const contactParts = [ev.usr_email, '0' + ev.usr_mobile].filter(p => p && p
-                            .trim());
-                        const addrParts = [ev.uadd_street, ev.uadd_barangay, ev.uadd_city, ev
-                            .uadd_province, ev.uadd_region
+                        const contactParts = [
+                            'Email: ' + ev.usr_email,
+                            'Number: 0' + ev.usr_mobile
                         ].filter(p => p && p.trim());
-                        const distLine = ev.svc_km_distance ? ev.svc_km_distance + 'KM from office' :
-                            null;
-                        const addr = [...contactParts, ...addrParts, distLine].filter(Boolean).join(
-                            ', ');
 
-                        track.appendChild(makeBlock(dF, dT,
-                            ev.usr_first_name + ' ' + ev.usr_last_name, addr,
-                            '#B5D4F4', '#0C447C', '#85B7EB'));
+                        const addrParts = [
+                            'Address: ' + ev.uadd_street,
+                            ev.uadd_barangay,
+                            ev.uadd_city,
+                            ev.uadd_province,
+                            ev.uadd_region
+                        ].filter(p => p && p.trim());
+
+                        const addressLine = addrParts.join(', ');
+
+                        const distLine = ev.svc_km_distance ?
+                            'Distance: ' + ev.svc_km_distance + 'KM from office' :
+                            null;
+
+                        let dateAssignedLine = null;
+                        if (ev.svcas_date_assigned) {
+                            const d = new Date(ev.svcas_date_assigned);
+                            const mm = String(d.getMonth() + 1).padStart(2, '0');
+                            const dd = String(d.getDate()).padStart(2, '0');
+                            const yyyy = d.getFullYear();
+                            dateAssignedLine = 'Date Assigned: ' + mm + '/' + dd + '/' + yyyy;
+                        }
+
+                        const assignedByLine = (ev.assigner_first_name && ev.assigner_last_name) ?
+                            'Assigned By: ' + ev.assigner_first_name + ' ' + ev.assigner_last_name :
+                            null;
+
+                        const addr = [
+                            ...contactParts,
+                            addressLine,
+                            distLine,
+                            dateAssignedLine,
+                            assignedByLine
+                        ].filter(Boolean).join('<br>');
+
+                        track.appendChild(makeBlock(
+                            dF,
+                            dT,
+                            ev.usr_first_name + ' ' + ev.usr_last_name,
+                            addr,
+                            '#B5D4F4',
+                            '#0C447C',
+                            '#85B7EB'
+                        ));
                     });
 
                     if (NEW_FROM !== null && NEW_TO !== null) {

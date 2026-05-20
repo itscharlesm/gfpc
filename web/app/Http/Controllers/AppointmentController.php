@@ -1169,10 +1169,15 @@ class AppointmentController extends Controller
                 ->join('services', 'services.svc_id', '=', 'service_appointments.svc_id')
                 ->join('users as clients', 'clients.usr_id', '=', 'services.usr_id')
                 ->leftJoin('user_addresses', 'service_appointments.uadd_id', '=', 'user_addresses.uadd_id')
+                ->leftJoin('users as assigner', 'assigner.usr_id', '=', 'service_appointment_schedules.svcas_assigned_by')
                 ->where('service_appointment_schedules.svcas_active', 1)
                 ->where('service_appointments.svca_approved_date', $approvedDate)
                 ->select(
                     'service_appointment_schedules.svcas_assigned_to',
+                    'service_appointment_schedules.svcas_date_assigned',
+                    'service_appointment_schedules.svcas_assigned_by',
+                    'assigner.usr_first_name as assigner_first_name',
+                    'assigner.usr_last_name as assigner_last_name',
                     'service_appointments.svca_approved_time_from',
                     'service_appointments.svca_approved_time_to',
                     'clients.usr_first_name',
@@ -1240,5 +1245,10 @@ class AppointmentController extends Controller
         session()->flash('successMessage', 'Appointment has been deleted.');
         return redirect()->back();
     }
-    // END DELETED APPOINTMENTS
+    // END DELETED APPOINTMENTSS
+    // END DELETED APPOINTMENTSS
+    // END DELETED APPOINTMENTSS
+    // END DELETED APPOINTMENTSS
+    // END DELETED APPOINTMENTSS
+    // END DELETED APPOINTMENTSS
 }

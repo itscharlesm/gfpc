@@ -1,755 +1,143 @@
-<style>
-    @media print {
-        body {
-            zoom: 100%;
-        }
+sample save in the database:
+public function requested_appointments_view_assess_confirmation(Request $request)
+{
+    $request->validate([
+        'svc_id' => 'required',
+        'svc_sa_number' => 'required',
+        'svc_infestation' => 'required',
+        'svc_location_price' => 'required|numeric',
+        'svc_final_price' => 'required|numeric',
+        'svca_approved_date' => 'required',
+        'svca_approved_time_from' => 'required',
+        'svca_approved_time_to' => 'required',
+    ]);
 
-        .no-print {
-            display: none !important;
-        }
+    $svc_id = $request->svc_id;
 
-        .print-only {
-            display: block !important;
-        }
+    if (
+        DB::table('services')
+            ->where('svc_sa_number', $request->svc_sa_number)
+            ->where('svc_id', '!=', $svc_id)
+            ->exists()
+    ) {
 
-        .print-hide {
-            display: none !important;
-        }
+        session()->flash('errorMessage', 'SA Number already exists.');
+        return redirect()->back();
     }
 
-    .table-responsive {
-        overflow: visible !important;
-    }
+    $svc_id = $request->svc_id;
+    $isTermite = $request->svc_is_termite;
+    $isPackage = $request->svc_is_package;
+    $servicePrice = $request->svc_location_price;
+    $finalPrice = $request->svc_final_price;
 
-    #sectionB {
-        overflow: visible !important;
-    }
+    $service = DB::table('services')->where('svc_id', $svc_id)->first();
 
-    .content-wrapper {
-        overflow-x: hidden;
-    }
-</style>
+    // ← NEW: shared fields (mirrors assess method)
+    $sharedFields = [
+        'svc_sa_number' => $request->svc_sa_number,
+        'svc_property_type' => $request->svc_property_type,
+        'svc_km_distance' => $request->svc_km_distance,
+        'svc_fixed_price' => $request->svc_fixed_price,
+        'svc_chemical_quantity' => $request->svc_chemical_quantity,
+        'svc_chemical_metric' => $request->svc_chemical_metric,
+        'svc_assessment_recommendation' => $request->svc_assessment_recommendation,
+    ];
 
-@extends('layouts.themes.main')
+    if ($isTermite == 1) {
+        $treatmentType = $request->svc_type_treatment;
+        $withDevice = ($treatmentType === 'HYBRID TREATMENT') ? 1 : 0;
+        $deviceCount = $withDevice ? (int) $request->svc_device_count : null;
+        $sqmInitial = $request->svc_sqm_initial ?? $service->svc_sqm_initial;
 
-@section('content')
-    {{-- Content Header --}}
-    <div class="content-header">
-        <div class="container-fluid">
-            <div class="row mb-2">
-                <div class="col-sm-6">
-                    <h1 class="m-0">Assessed Appointment</h1>
-                </div>
-                <div class="col-sm-6">
-                    <ol class="breadcrumb float-sm-right">
-                        <li class="breadcrumb-item">
-                            <a href="{{ action('App\Http\Controllers\AdminController@home') }}">Home</a>
-                        </li>
-                        <li class="breadcrumb-item">Appointment</li>
-                        <li class="breadcrumb-item">Assessed</li>
-                        <li class="breadcrumb-item active">View</li>
-                    </ol>
-                </div>
-            </div>
-        </div>
-    </div>
+        $deviceCostRow = DB::table('service_package_area_devices')
+            ->where('branch_id', $service->branch_id)
+            ->where('svcpad_active', 1)
+            ->first();
 
-    {{-- Main Content --}}
-    <section class="content">
-        @include('layouts.partials.onclick')
-        @include('layouts.partials.alerts')
-        @include('layouts.partials.modal_style')
-        <div class="container-fluid">
-            <div class="card">
-                <div class="card-body overflow-auto">
-                    <div class="text-center mb-2">
-                        <h5 style="margin: 0; font-weight: bold;">GO FORWARD PEST CONTROL</h5>
-                        <p style="margin: 0;">{{ $display->branch_name }}</p>
-                    </div>
+        $devicePrice = ($withDevice && $deviceCount && $deviceCostRow)
+            ? $deviceCount * $deviceCostRow->svcpad_cost
+            : 0;
 
-                    <div class="mb-4 position-relative text-center">
-                        <strong style="color: red;">SERVICE ORDER</strong>
+        DB::table('services')
+            ->where('svc_id', $svc_id)
+            ->update(array_merge($sharedFields, [   // ← merged
+                'svc_is_termite' => 1,
+                'svcpat_id' => $request->svcpat_id,
+                'svc_type_treatment' => $treatmentType,
+                'svc_with_device' => $withDevice,
+                'svc_device_count' => $deviceCount,
+                'svc_device_price' => $devicePrice,
+                'svc_sqm_initial' => $sqmInitial,
+                'svc_sqm_final' => $sqmInitial,
+                'svc_status' => 'ASSESSED',
+                'svc_infestation' => $request->svc_infestation,
+                'svc_location_price' => $servicePrice,
+                'svc_final_price' => $finalPrice,
+                'svc_balance' => $finalPrice,
+                'svc_date_modified' => Carbon::now(),
+                'svc_modified_by' => session('usr_id'),
+            ]));
 
-                        <strong style="position: absolute; right: 0; top: 0;">
-                            SA-{{ str_pad($display->svc_sa_number, 6, '0', STR_PAD_LEFT) }}
-                        </strong>
-                    </div>
-                    <div class="row">
+        DB::table('service_orders')
+            ->where('svc_id', $svc_id)
+            ->update([
+                'svcpat_id' => $request->svcpat_id,
+                'svco_date_modified' => Carbon::now(),
+                'svco_modified_by' => session('usr_id'),
+            ]);
 
-                        {{-- Appointment Information Display --}}
-                        <div class="table-responsive overflow-auto" id="sectionA">
-                            <table class="table table-bordered text-left align-middle">
-                                <tbody>
-                                    <tr>
-                                        <th colspan="6" class="text-center table-light">CLIENT INFORMATION</th>
-                                    </tr>
-                                    <tr>
-                                        <td style="font-weight: bold;">CLIENT NAME</td>
-                                        <td>{{ $display->usr_first_name }} {{ $display->usr_last_name }}</td>
-                                        <td style="font-weight: bold;">EMAIL</td>
-                                        <td>{{ $display->usr_email }}</td>
-                                        <td style="font-weight: bold;">MOBILE</td>
-                                        <td>{{ $display->usr_mobile }}</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="font-weight: bold;">ADDRESS</td>
-                                        <td colspan="3">
-                                            {{ implode(
-                                                ', ',
-                                                array_filter([
-                                                    $display->uadd_street,
-                                                    $display->uadd_barangay,
-                                                    $display->uadd_city,
-                                                    $display->uadd_province,
-                                                    $display->uadd_region,
-                                                ]),
-                                            ) }}
-                                        </td>
-                                        <td style="font-weight: bold;">ADDRESS TYPE</td>
-                                        <td>{{ $display->add_name }}</td>
-                                    </tr>
-
-                                    <tr>
-                                        <th colspan="6" class="text-center table-light">SERVICE INFORMATION</th>
-                                    </tr>
-                                    <tr>
-                                        <td style="font-weight: bold;">BRANCH</td>
-                                        <td>{{ $display->branch_name }}</td>
-                                        <td style="font-weight: bold;">STATUS</td>
-                                        <td>{{ $display->svc_status }}</td>
-                                        <td style="font-weight: bold;">PAYMENT STATUS</td>
-                                        <td>{{ $display->svc_payment_status }}</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="font-weight: bold;">PROPERTY TYPE</td>
-                                        <td>{{ $display->svc_property_type }}</td>
-                                        <td style="font-weight: bold;">INFESTATION</td>
-                                        <td>{{ $display->svc_infestation }}</td>
-                                        <td style="font-weight: bold;">DISTANCE</td>
-                                        <td>{{ $display->svc_km_distance }} KM</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="font-weight: bold;">IS TERMITE</td>
-                                        <td>{{ $display->svc_is_termite ? 'YES' : 'NO' }}</td>
-                                        <td style="font-weight: bold;">IS PACKAGE</td>
-                                        <td colspan="3">{{ $display->svc_is_package ? 'YES' : 'NO' }}</td>
-                                    </tr>
-
-                                    <tr>
-                                        <th colspan="6" class="text-center table-light">PRICING</th>
-                                    </tr>
-                                    <tr>
-                                        <td style="font-weight: bold;">INITIAL PRICE</td>
-                                        <td>₱{{ number_format($display->svc_initial_price, 2) }}</td>
-                                        <td style="font-weight: bold;">LOCATION PRICE</td>
-                                        <td>₱{{ number_format($display->svc_location_price, 2) }}</td>
-                                        <td style="font-weight: bold;">FIXED PRICE</td>
-                                        <td>₱{{ number_format($display->svc_fixed_price, 2) }}</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="font-weight: bold;">FINAL PRICE</td>
-                                        <td>₱{{ number_format($display->svc_final_price, 2) }}</td>
-                                        <td style="font-weight: bold;">BALANCE</td>
-                                        <td colspan="3">₱{{ number_format($display->svc_balance, 2) }}</td>
-                                    </tr>
-
-                                    @if ($display->svc_is_termite)
-                                        <tr>
-                                            <th colspan="6" class="text-center table-light">TERMITE CASE</th>
-                                        </tr>
-                                        <tr>
-                                            <td style="font-weight: bold;">TREATMENT TYPE</td>
-                                            <td>{{ $display->svc_type_treatment }}</td>
-                                            <td style="font-weight: bold;">INITIAL SQM</td>
-                                            <td>{{ $display->svc_sqm_initial }}</td>
-                                            <td style="font-weight: bold;">FINAL SQM</td>
-                                            <td>{{ $display->svc_sqm_final }}</td>
-                                        </tr>
-                                        <tr>
-                                            <td style="font-weight: bold;">WITH DEVICE</td>
-                                            <td>{{ $display->svc_with_device ? 'YES' : 'NO' }}</td>
-                                            <td style="font-weight: bold;">DEVICE COUNT</td>
-                                            <td colspan="3">{{ $display->svc_device_count ?? 'N/A' }}</td>
-                                        </tr>
-                                    @endif
-
-                                    <tr>
-                                        <th colspan="6" class="text-center table-light">CHEMICAL</th>
-                                    </tr>
-                                    <tr>
-                                        <td style="font-weight: bold;">CHEMICAL QUANTITY</td>
-                                        <td>{{ $display->svc_chemical_quantity }}</td>
-                                        <td style="font-weight: bold;">CHEMICAL METRIC</td>
-                                        <td colspan="3">{{ $display->svc_chemical_metric }}</td>
-                                    </tr>
-
-                                    <tr>
-                                        <th colspan="6" class="text-center table-light">SCHEDULE</th>
-                                    </tr>
-                                    <tr>
-                                        <td style="font-weight: bold;">APPROVED BY</td>
-                                        <td>{{ $display->approved_first_name }}
-                                            {{ $display->approved_last_name }}</td>
-                                        <td style="font-weight: bold;">CLIENT DATE</td>
-                                        <td>{{ \Carbon\Carbon::parse($display->svca_client_date)->format('m/d/Y') }}</td>
-                                        <td style="font-weight: bold;">CLIENT TIME</td>
-                                        <td>
-                                            {{ \Carbon\Carbon::parse($display->svca_client_time)->format('h:i A') }}</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="font-weight: bold;">DATE APPROVED</td>
-                                        <td>{{ \Carbon\Carbon::parse($display->svca_date_approved)->format('m/d/Y') }}</td>
-                                        <td style="font-weight: bold;">TIME FROM</td>
-                                        <td>{{ \Carbon\Carbon::parse($display->svca_approved_time_from)->format('h:i A') }}
-                                        </td>
-                                        <td style="font-weight: bold;">TIME TO</td>
-                                        <td>{{ \Carbon\Carbon::parse($display->svca_approved_time_to)->format('h:i A') }}
-                                        </td>
-                                    </tr>
-
-                                    <tr>
-                                        <th colspan="6" class="text-center table-light">PROBLEM DESCRIPTION</th>
-                                    </tr>
-                                    <tr>
-                                        <td colspan="6" style="text-align: justify">
-                                            {{ $display->svc_problem_description }}
-                                        </td>
-                                    </tr>
-
-                                    @if (!empty($display->svc_assessment_recommendation))
-                                        <tr>
-                                            <th colspan="6" class="text-center table-light">ASSESSMENT RECOMMENDATION
-                                            </th>
-                                        </tr>
-                                        <tr>
-                                            <td colspan="6" style="text-align: justify">
-                                                {{ $display->svc_assessment_recommendation }}
-                                            </td>
-                                        </tr>
-                                    @endif
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <div class="d-flex justify-content-end flex-wrap mb-3 no-print">
-                            <button type="button" class="btn btn-success mr-2 mb-2" data-toggle="modal"
-                                data-target="#assignTechnicianModal">
-                                <span class="fa fa-user"></span> Assign Technician
-                            </button>
-                            <button type="button" class="btn btn-primary mr-2 mb-2" onclick="printDefault()">
-                                <span class="fa fa-print"></span> Print
-                            </button>
-                            <div class="btn-group mr-2 mb-2">
-                                <button type="button" class="btn btn-primary dropdown-toggle" data-toggle="dropdown"
-                                    aria-haspopup="true" aria-expanded="false">
-                                    <span class="fa fa-print"></span> Print Options
-                                </button>
-                                <div class="dropdown-menu p-3" style="min-width: 200px;">
-                                    <label class="dropdown-item">
-                                        <input type="checkbox" class="print-toggle mr-1" data-target="sectionA">
-                                        Appointment
-                                        Information
-                                    </label>
-                                    <label class="dropdown-item">
-                                        <input type="checkbox" class="print-toggle mr-1" data-target="sectionB"> Service
-                                        Orders
-                                    </label>
-                                    @if ($appointmentImages->count() > 0)
-                                        <label class="dropdown-item">
-                                            <input type="checkbox" class="print-toggle mr-1" data-target="sectionC">
-                                            Client
-                                            Appointment Images
-                                        </label>
-                                    @endif
-                                    <div class="dropdown-item text-center">
-                                        <button class="btn btn-primary btn-sm mt-2" onclick="handlePrint()">Confirm &
-                                            Print</button>
-                                    </div>
-                                    <div class="dropdown-item">
-                                        <p id="warning" style="color:red; display:none;" class="mt-1">Select at least
-                                            one
-                                            section.</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <a class="btn btn-danger mr-2 mb-2" href="">
-                                <span class="fa fa-user-shield"></span> Override
-                            </a>
-                        </div>
-
-                        {{-- Service Order Display --}}
-                        <div class="table-responsive" id="sectionB">
-                            <hr class="no-print">
-                            @if ($display->svc_is_termite == 0)
-                                {{-- NON-TERMITE: Two columns - Pest Type & Service Order --}}
-                                <div class="row">
-                                    {{-- PEST TYPE TABLE --}}
-                                    <div class="col-md-6">
-                                        <table class="table table-bordered text-center mb-2">
-                                            <thead>
-                                                <tr style="background-color: #f5f5f5;">
-                                                    <th colspan="3"><strong>PEST TYPE</strong></th>
-                                                </tr>
-                                                <tr style="background-color: #f5f5f5;">
-                                                    <th style="width: 50px;">No.</th>
-                                                    <th>Pest</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                @foreach ($pestTypes as $index => $type)
-                                                    <tr>
-                                                        <td style="vertical-align: middle; text-align: center">
-                                                            {{ $index + 1 }}</td>
-                                                        <td style="vertical-align: middle; text-align: center">
-                                                            {{ $type->svcp_pest_type }}</td>
-                                                    </tr>
-                                                @endforeach
-                                            </tbody>
-                                        </table>
-                                    </div>
-
-                                    {{-- SERVICE ORDER TABLE (non-termite areas) --}}
-                                    <div class="col-md-6">
-                                        <table class="table table-bordered text-center mb-2">
-                                            <thead>
-                                                <tr style="background-color: #f5f5f5;">
-                                                    <th colspan="4"><strong>SERVICE ORDER</strong></th>
-                                                </tr>
-                                                <tr style="background-color: #f5f5f5;">
-                                                    <th style="width: 50px;">No.</th>
-                                                    <th>Service</th>
-                                                    <th>Cost</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                @foreach ($serviceAreas as $index => $area)
-                                                    <tr>
-                                                        <td style="vertical-align: middle; text-align: center">
-                                                            {{ $index + 1 }}</td>
-                                                        <td style="vertical-align: middle; text-align: center">
-                                                            {{ $area->svcpa_area }}</td>
-                                                        <td style="vertical-align: middle; text-align: center">
-                                                            ₱{{ number_format($area->svcpa_cost, 2) }}</td>
-                                                    </tr>
-                                                @endforeach
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            @elseif ($display->svc_is_termite == 1)
-                                {{-- TERMITE: Full width - Termite Details --}}
-                                <div class="col-md-12">
-                                    <table class="table table-bordered text-center mb-2">
-                                        <thead>
-                                            <tr style="background-color: #f5f5f5;">
-                                                <th colspan="5"><strong>TERMITE DETAILS</strong></th>
-                                            </tr>
-                                            <tr style="background-color: #f5f5f5;">
-                                                <th style="width: 50px;">No.</th>
-                                                <th>SQM Details</th>
-                                                <th>Cost</th>
-                                                <th>Computation</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            @forelse ($termiteAreas as $index => $area)
-                                                <tr>
-                                                    <td style="vertical-align: middle; text-align: center">
-                                                        {{ $index + 1 }}</td>
-                                                    <td style="vertical-align: middle; text-align: center">
-                                                        {{ $area->svcpat_sqm_details }}</td>
-                                                    <td style="vertical-align: middle; text-align: center">
-                                                        ₱{{ number_format($area->svcpat_cost, 2) }}</td>
-                                                    <td style="vertical-align: middle; text-align: center">
-                                                        @if ($display->svc_type_treatment == 'STANDARD TREATMENT')
-                                                            <p>STANDARD TREATMENT: sqm × cost</p>
-                                                        @elseif ($display->svc_type_treatment == 'HYBRID TREATMENT')
-                                                            <p>HYBRID TREATMENT: sqm × cost + device</p>
-                                                        @else
-                                                            <p>{{ $display->svc_type_treatment }}: sqm × cost</p>
-                                                        @endif
-                                                    </td>
-                                                </tr>
-                                            @empty
-                                                <tr>
-                                                    <td colspan="5" class="text-center text-muted">No termite areas
-                                                        added.</td>
-                                                </tr>
-                                            @endforelse
-                                        </tbody>
-                                    </table>
-                                </div>
-                            @endif
-                        </div>
-
-                        {{-- Client Appointment Images --}}
-                        @if ($appointmentImages->count() > 0)
-                            <div class="table-responsive" id="sectionC">
-                                <table class="table table-bordered text-center mb-2">
-                                    <thead>
-                                        <tr style="background-color: #f5f5f5;">
-                                            <th colspan="5">
-                                                <strong>CLIENT APPOINTMENT IMAGES</strong>
-                                            </th>
-                                        </tr>
-                                    </thead>
-
-                                    <tbody>
-                                        @foreach ($appointmentImages->chunk(5) as $chunk)
-                                            <tr>
-                                                @foreach ($chunk as $img)
-                                                    <td style="width:20%; padding:10px; vertical-align:middle;">
-                                                        <a href="{{ asset('images/client_images/' . $img->svcap_image) }}"
-                                                            target="_blank"
-                                                            style="display:block; width:100%; aspect-ratio:1/1; overflow:hidden;">
-
-                                                            <img src="{{ asset('images/client_images/' . $img->svcap_image) }}"
-                                                                alt="Appointment Image"
-                                                                style="width:100%; height:100%; object-fit:cover; display:block;">
-                                                        </a>
-                                                    </td>
-                                                @endforeach
-
-                                                {{-- Fill empty cells if less than 5 images --}}
-                                                @for ($i = $chunk->count(); $i < 5; $i++)
-                                                    <td style="vertical-align: middle;"></td>
-                                                @endfor
-                                            </tr>
-                                        @endforeach
-                                    </tbody>
-                                </table>
-                            </div>
-                        @endif
-
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    {{-- Assign Technician Modal --}}
-    <div class="modal fade" id="assignTechnicianModal" tabindex="-1" role="dialog"
-        aria-labelledby="assignTechnicianModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-xl" role="document">
-            <form action="{{ url('management/service-orders/assign-technician') }}" method="POST">
-                @csrf
-                <div class="modal-content">
-                    <div class="modal-header bg-success text-white">
-                        <h5 class="modal-title text-white" id="assignTechnicianModalLabel">
-                            <span class="fa fa-user text-white"></span> Assign Technician
-                        </h5>
-                        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
-                            <span aria-hidden="true">&times;</span>
-                        </button>
-                    </div>
-
-                    <div class="modal-body">
-                        <input type="hidden" name="svc_id" value="{{ $display->svc_id }}">
-
-                        <div class="form-group mb-3">
-                            <label>Assign Technician <span class="text-danger">*</span></label>
-                            <select class="form-control" name="svcas_assigned_to" id="technicianSelect" required>
-                                <option value="" disabled selected>Select Technician</option>
-                                @foreach ($technicians as $tech)
-                                    @php
-                                        $label = $tech->usr_last_name . ', ' . $tech->usr_first_name;
-                                        $disabled = $tech->is_rest_day || $tech->is_busy;
-                                        $suffix = $tech->is_rest_day
-                                            ? ' — (Rest Day)'
-                                            : ($tech->is_busy
-                                                ? ' — (Not Available)'
-                                                : '');
-                                    @endphp
-                                    <option value="{{ $tech->usr_id }}" data-rest="{{ $tech->is_rest_day ? 1 : 0 }}"
-                                        data-busy="{{ $tech->is_busy ? 1 : 0 }}"
-                                        @if ($disabled) disabled @endif>
-                                        {{ $label }}{{ $suffix }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
-
-                        {{-- Timeline --}}
-                        <div id="techTimelineWrap" style="display:none;">
-                            <hr>
-                            <p class="mb-2" style="font-size:13px; color:#666;">
-                                Schedule for <strong>{{ \Carbon\Carbon::parse($approvedDate)->format('F d, Y') }}</strong>
-                            </p>
-
-                            <div class="d-flex mb-2" style="gap:12px; font-size:11px; color:#666;">
-                                <span style="display:inline-flex;align-items:center;gap:4px;">
-                                    <span
-                                        style="width:12px;height:12px;border-radius:3px;background:#B5D4F4;border:0.5px solid #85B7EB;display:inline-block;"></span>
-                                    Existing appointment
-                                </span>
-                                <span style="display:inline-flex;align-items:center;gap:4px;">
-                                    <span
-                                        style="width:12px;height:12px;border-radius:3px;background:#C0DD97;border:0.5px solid #97C459;display:inline-block;"></span>
-                                    This appointment
-                                </span>
-                            </div>
-
-                            <div style="overflow-x:auto;">
-                                <div id="techTimeline" style="min-width:600px; padding-bottom:8px;"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-dismiss="modal">
-                            <span class="fa fa-times"></span> Close
-                        </button>
-                        <button type="submit" class="btn btn-success">
-                            <span class="fa fa-save"></span> Assign
-                        </button>
-                    </div>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <script>
-        function printDefault() {
-            window.print();
+    } else {
+        $sqmInitial = $service->svc_sqm_initial;
+        if ($isPackage == 0 && is_null($service->svc_sqm_initial)) {
+            $sqmInitial = null;
+        } elseif ($isPackage == 1) {
+            $sqmInitial = $request->svc_sqm_initial ?? $service->svc_sqm_initial;
         }
 
-        function handlePrint() {
-            console.log("Print button clicked!");
+        DB::table('services')
+            ->where('svc_id', $svc_id)
+            ->update(array_merge($sharedFields, [   // ← merged
+                'svc_is_package' => $isPackage,
+                'svc_sqm_initial' => $sqmInitial,
+                'svc_sqm_final' => $isPackage == 1 ? $sqmInitial : null,
+                'svc_status' => 'ASSESSED',
+                'svc_infestation' => $request->svc_infestation,
+                'svc_location_price' => $servicePrice,
+                'svc_initial_price' => $request->svc_initial_price ?? $service->svc_initial_price,
+                'svc_final_price' => $finalPrice,
+                'svc_balance' => $finalPrice,
+                'svc_date_modified' => Carbon::now(),
+                'svc_modified_by' => session('usr_id'),
+            ]));
+    }
 
-            const checkboxes = document.querySelectorAll('.print-toggle');
-            const warning = document.getElementById('warning');
-            let anyChecked = false;
+    DB::table('service_appointments')
+        ->where('svc_id', $svc_id)
+        ->update([
+            'svca_approved_date' => $request->svca_approved_date,
+            'svca_approved_time_from' => $request->svca_approved_time_from,
+            'svca_approved_time_to' => $request->svca_approved_time_to,
+            'svca_date_approved' => Carbon::now(),
+            'svca_approved_by' => session('usr_id'),
+            'svca_date_modified' => Carbon::now(),
+            'svca_modified_by' => session('usr_id'),
+        ]);
 
-            // Reset all sections (show all initially) - Check if the section exists
-            const sectionIds = [
-                'sectionA', 'sectionB', 'sectionC'
-            ];
+    $serviceOrder = 'SA-' . str_pad($svc_id, 6, '0', STR_PAD_LEFT);
 
-            sectionIds.forEach(sectionId => {
-                const section = document.getElementById(sectionId);
-                if (section) {
-                    section.classList.remove('print-hide');
-                }
-            });
+    logUserActivity('Manage Appointments', 'Confirmed Assessment ' . $serviceOrder);
 
-            // Hide unselected sections
-            checkboxes.forEach(checkbox => {
-                const targetId = checkbox.dataset.target;
-                const targetDiv = document.getElementById(targetId);
+    session()->flash('successMessage', 'Appointment successfully assessed.');
+    return redirect()->action(
+        [AppointmentController::class, 'assessed_appointments_view'],
+        ['svc_id' => $svc_id]
+    );
+}
 
-                // Only modify the target if it exists
-                if (targetDiv) {
-                    if (checkbox.checked) {
-                        anyChecked = true;
-                        targetDiv.classList.remove('print-hide');
-                    } else {
-                        targetDiv.classList.add('print-hide');
-                    }
-                } else {
-                    console.error(`Element with ID ${targetId} not found!`);
-                }
-            });
+assign technician
 
-            if (!anyChecked) {
-                warning.style.display = 'block';
-                return;
-            }
-
-            warning.style.display = 'none';
-
-            // Delay the print to ensure sections are properly hidden/shown
-            setTimeout(() => {
-                console.log("Triggering print dialog...");
-                window.print();
-            }, 500); // Allow time for the layout to update
-
-            // Restore view after printing
-            setTimeout(() => {
-                sectionIds.forEach(sectionId => {
-                    const section = document.getElementById(sectionId);
-                    if (section) {
-                        section.classList.remove('print-hide');
-                    }
-                });
-            }, 1000);
-        }
-    </script>
-
-    <script>
-        (function() {
-            const HOURS_START = 0;
-            const HOURS_END = 24;
-            const TOTAL_HRS = HOURS_END - HOURS_START;
-            const ROW_HEIGHT = 36;
-            const LABEL_W = 52; // px reserved for the technician label on the left
-
-            const NEW_FROM_STR = "{{ $approvedTimeFrom }}";
-            const NEW_TO_STR = "{{ $approvedTimeTo }}";
-            const DAY_SCHEDULES = @json($daySchedules);
-
-            function parseTime(str) {
-                if (!str) return null;
-                const parts = str.split(':');
-                return parseInt(parts[0]) + parseInt(parts[1]) / 60;
-            }
-
-            const NEW_FROM = parseTime(NEW_FROM_STR);
-            const NEW_TO = parseTime(NEW_TO_STR);
-
-            document.getElementById('technicianSelect').addEventListener('change', function() {
-                const techId = this.value;
-                const wrap = document.getElementById('techTimelineWrap');
-                if (!techId) {
-                    wrap.style.display = 'none';
-                    return;
-                }
-                wrap.style.display = 'block';
-                renderTimeline(techId);
-            });
-
-            function pct(h) {
-                return ((h - HOURS_START) / TOTAL_HRS * 100).toFixed(4) + '%';
-            }
-
-            function renderTimeline(techId) {
-                const container = document.getElementById('techTimeline');
-                container.innerHTML = '';
-
-                // ── Hour axis ────────────────────────────────────────────────
-                const axis = document.createElement('div');
-                axis.style.cssText = `display:flex; margin-left:0; position:relative; height:20px; margin-bottom:4px;`;
-
-                for (let h = HOURS_START; h <= HOURS_END; h++) {
-                    const span = document.createElement('span');
-                    const leftPct = ((h - HOURS_START) / TOTAL_HRS * 100).toFixed(4) + '%';
-                    span.style.cssText =
-                        `position:absolute; left:${leftPct}; transform:translateX(-50%); font-size:10px; color:#999; white-space:nowrap;`;
-                    const h12 = h === 0 || h === 24 ? 12 : h > 12 ? h - 12 : h;
-                    const ampm = h === 0 || h === 24 ? 'am' : h < 12 ? 'am' : h === 12 ? 'pm' : 'pm';
-                    span.textContent = h12 + ampm;
-                    axis.appendChild(span);
-                }
-                container.appendChild(axis);
-
-                // ── Track row ─────────────────────────────────────────────────
-                const rowWrap = document.createElement('div');
-                rowWrap.style.cssText = `display:flex; align-items:center; margin-bottom:2px;`;
-
-                // (No label since it's a single-tech view — the select shows who it is)
-                // const labelDiv = document.createElement('div');
-                // labelDiv.style.cssText = `flex:none; width:${LABEL_W}px; font-size:11px; color:#666; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;`;
-                // labelDiv.textContent = '';
-                // rowWrap.appendChild(labelDiv);
-
-                // Track
-                const track = document.createElement('div');
-                track.style.cssText =
-                    `flex:1; position:relative; height:${ROW_HEIGHT}px; background:#f7f7f7; border:0.5px solid #ddd; border-radius:6px; overflow:visible;`;
-
-                // Hour grid lines
-                for (let h = HOURS_START; h <= HOURS_END; h++) {
-                    const line = document.createElement('div');
-                    line.style.cssText =
-                        `position:absolute; top:0; bottom:0; left:${pct(h)}; width:0.5px; background:#e0e0e0;`;
-                    track.appendChild(line);
-                }
-
-                // Existing blocks
-                const existingSlots = DAY_SCHEDULES[techId] || [];
-                existingSlots.forEach(ev => {
-                    const evFrom = parseTime(ev.svca_approved_time_from);
-                    const evTo = parseTime(ev.svca_approved_time_to);
-                    if (evFrom === null || evTo === null) return;
-                    // clamp to display range
-                    const dispFrom = Math.max(evFrom, HOURS_START);
-                    const dispTo = Math.min(evTo, HOURS_END);
-                    if (dispFrom >= dispTo) return;
-
-                    const contactParts = [ev.usr_email, '0' + ev.usr_mobile].filter(p => p && p.trim());
-                    const addressParts = [ev.uadd_street, ev.uadd_barangay, ev.uadd_city, ev.uadd_province, ev
-                        .uadd_region
-                    ].filter(p => p && p.trim());
-                    const distanceLine = ev.svc_km_distance ? ev.svc_km_distance + 'KM from office' : null;
-                    const addr = [...contactParts, ...addressParts, distanceLine].filter(Boolean).join(', ');
-
-                    const blk = makeBlock(dispFrom, dispTo,
-                        ev.usr_first_name + ' ' + ev.usr_last_name, addr,
-                        '#B5D4F4', '#0C447C', '#85B7EB');
-                    track.appendChild(blk);
-                });
-
-                // New appointment block
-                if (NEW_FROM !== null && NEW_TO !== null) {
-                    const dispFrom = Math.max(NEW_FROM, HOURS_START);
-                    const dispTo = Math.min(NEW_TO, HOURS_END);
-                    if (dispFrom < dispTo) {
-                        const blk = makeBlock(dispFrom, dispTo,
-                            'This appointment', '',
-                            '#C0DD97', '#27500A', '#97C459');
-                        track.appendChild(blk);
-                    }
-                }
-
-                rowWrap.appendChild(track);
-                container.appendChild(rowWrap);
-            }
-
-            function makeBlock(from, to, label, addr, bg, color, border) {
-                const blk = document.createElement('div');
-                const leftPct = ((from - HOURS_START) / TOTAL_HRS * 100).toFixed(4) + '%';
-                const widthPct = ((to - from) / TOTAL_HRS * 100).toFixed(4) + '%';
-                blk.style.cssText = [
-                    'position:absolute; top:4px; bottom:4px;',
-                    'left:' + leftPct + '; width:' + widthPct + ';',
-                    'background:' + bg + '; color:' + color + '; border:0.5px solid ' + border + ';',
-                    'border-radius:5px; display:flex; align-items:center; justify-content:center;',
-                    'font-size:11px; font-weight:500; overflow:hidden; white-space:nowrap;',
-                    'text-overflow:ellipsis; padding:0 6px; cursor:default;'
-                ].join('');
-                blk.textContent = label;
-                blk.addEventListener('mouseenter', e => showTooltip(e, label, addr));
-                blk.addEventListener('mousemove', moveTooltip);
-                blk.addEventListener('mouseleave', hideTooltip);
-                return blk;
-            }
-
-            // Tooltip
-            let tt = null;
-
-            function ensureTT() {
-                if (!tt) {
-                    tt = document.createElement('div');
-                    tt.style.cssText = [
-                        'position:fixed; background:#fff; border:0.5px solid #ccc;',
-                        'border-radius:8px; padding:8px 12px; font-size:12px;',
-                        'pointer-events:none; z-index:9999; display:none;',
-                        'box-shadow:0 4px 12px rgba(0,0,0,.08); max-width:220px; line-height:1.5;'
-                    ].join('');
-                    document.body.appendChild(tt);
-                }
-            }
-
-            function showTooltip(e, label, addr) {
-                ensureTT();
-                tt.innerHTML = '<strong>' + label + '</strong>' + (addr ? '<br>' + addr : '');
-                tt.style.display = 'block';
-                moveTooltip(e);
-            }
-
-            function moveTooltip(e) {
-                if (tt) {
-                    tt.style.left = (e.clientX + 14) + 'px';
-                    tt.style.top = (e.clientY + 14) + 'px';
-                }
-            }
-
-            function hideTooltip() {
-                if (tt) tt.style.display = 'none';
-            }
-        })();
-    </script>
-@endsection
+Route::get('service/orders/appointments/assessed/assign', [AppointmentController::class, 'assessed_appointments_view_assign']);
 
 public function assessed_appointments_view($svc_id)
 {
@@ -923,10 +311,15 @@ public function assessed_appointments_view($svc_id)
             ->join('services', 'services.svc_id', '=', 'service_appointments.svc_id')
             ->join('users as clients', 'clients.usr_id', '=', 'services.usr_id')
             ->leftJoin('user_addresses', 'service_appointments.uadd_id', '=', 'user_addresses.uadd_id')
+            ->leftJoin('users as assigner', 'assigner.usr_id', '=', 'service_appointment_schedules.svcas_assigned_by')
             ->where('service_appointment_schedules.svcas_active', 1)
             ->where('service_appointments.svca_approved_date', $approvedDate)
             ->select(
                 'service_appointment_schedules.svcas_assigned_to',
+                'service_appointment_schedules.svcas_date_assigned',
+                'service_appointment_schedules.svcas_assigned_by',
+                'assigner.usr_first_name as assigner_first_name',
+                'assigner.usr_last_name as assigner_last_name',
                 'service_appointments.svca_approved_time_from',
                 'service_appointments.svca_approved_time_to',
                 'clients.usr_first_name',
@@ -947,11 +340,165 @@ public function assessed_appointments_view($svc_id)
         }
     }
 
-    return view('service_orders.appointments.assessed.view_assessed', compact('display', 'pestTypes', 'serviceAreas', 'termiteAreas', 'appointmentImages', 'technicians', 'approvedDate', 'approvedTimeFrom', 'approvedTimeTo', 'daySchedules'));
+    $allTechs = $technicians->map(function ($t) {
+        return [
+            'id' => $t->usr_id,
+            'label' => $t->usr_last_name . ', ' . substr($t->usr_first_name, 0, 1) . '.',
+            'is_rest' => $t->is_rest_day,
+            'is_busy' => $t->is_busy,
+        ];
+    })->values();
+
+    return view('service_orders.appointments.assessed.view_assessed', compact('display', 'pestTypes', 'serviceAreas', 'termiteAreas', 'appointmentImages', 'technicians', 'approvedDate', 'approvedTimeFrom', 'approvedTimeTo', 'daySchedules', 'allTechs'));
 }
 
-so the current plotting is we just display the schedules of the technician for the day
+{{-- Assign Technician Modal --}}
+<div class="modal fade" id="assignTechnicianModal" tabindex="-1" role="dialog"
+    aria-labelledby="assignTechnicianModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl" role="document">
+        <form action="{{ url('management/service-orders/assign-technician') }}" method="POST">
+            @csrf
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title text-white" id="assignTechnicianModalLabel">
+                        <span class="fa fa-user text-white"></span> Assign Technician
+                    </h5>
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
 
-now don't touch existing function below the plotting add another wherein we display the schedules of all technician on this day but in respective branch of course (we have that in existing function), we just make it like editing video when there is the same time frame we add it below the bar and the same functions like hover and all
+                <div class="modal-body">
+                    <input type="hidden" name="svc_id" value="{{ $display->svc_id }}">
 
-I do this so that the one will plot will have the best idea who to use
+                    <div class="form-group mb-3">
+                        <label>Assign Technician <span class="text-danger">*</span></label>
+                        <select class="form-control" name="svcas_assigned_to" id="technicianSelect" required>
+                            <option value="" disabled selected>Select Technician</option>
+                            @foreach ($technicians as $tech)
+                                @php
+                                    $label = $tech->usr_last_name . ', ' . $tech->usr_first_name;
+                                    $disabled = $tech->is_rest_day || $tech->is_busy;
+                                    $suffix = $tech->is_rest_day
+                                        ? ' — (Rest Day)'
+                                        : ($tech->is_busy
+                                            ? ' — (Not Available)'
+                                            : '');
+                                @endphp
+                                <option value="{{ $tech->usr_id }}" data-rest="{{ $tech->is_rest_day ? 1 : 0 }}"
+                                    data-busy="{{ $tech->is_busy ? 1 : 0 }}"
+                                    @if ($disabled) disabled @endif>
+                                    {{ $label }}{{ $suffix }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <hr>
+
+                    {{-- Tab Navigation --}}
+                    <ul class="nav nav-tabs" id="timelineTabs" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link active" id="selected-tech-tab" data-toggle="tab"
+                                href="#selectedTechPane" role="tab" aria-controls="selectedTechPane"
+                                aria-selected="true">
+                                <span class="fa fa-user mr-1"></span> Selected Technician
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="all-tech-tab" data-toggle="tab" href="#allTechPane"
+                                role="tab" aria-controls="allTechPane" aria-selected="false">
+                                <span class="fa fa-users mr-1"></span> All Technicians
+                            </a>
+                        </li>
+                    </ul>
+
+                    {{-- Tab Content --}}
+                    <div class="tab-content pt-3" id="timelineTabContent">
+
+                        {{-- Tab 1: Selected Technician --}}
+                        <div class="tab-pane fade show active" id="selectedTechPane" role="tabpanel"
+                            aria-labelledby="selected-tech-tab">
+                            <p id="noTechSelected" class="text-muted" style="font-size:13px;">
+                                Select a technician above to view their schedule.
+                            </p>
+                            <div id="techTimelineWrap" style="display:none;">
+                                <p class="mb-2" style="font-size:13px; color:#666;">
+                                    Schedule for
+                                    <strong>{{ \Carbon\Carbon::parse($approvedDate)->format('F d, Y') }}</strong>
+                                </p>
+                                <div class="d-flex mb-2" style="gap:12px; font-size:11px; color:#666;">
+                                    <span style="display:inline-flex;align-items:center;gap:4px;">
+                                        <span
+                                            style="width:12px;height:12px;border-radius:3px;background:#B5D4F4;border:0.5px solid #85B7EB;display:inline-block;"></span>
+                                        Existing appointment
+                                    </span>
+                                    <span style="display:inline-flex;align-items:center;gap:4px;">
+                                        <span
+                                            style="width:12px;height:12px;border-radius:3px;background:#C0DD97;border:0.5px solid #97C459;display:inline-block;"></span>
+                                        This appointment
+                                    </span>
+                                </div>
+                                <div style="overflow-x:auto;">
+                                    <div id="techTimeline" style="min-width:600px; padding-bottom:8px;"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- Tab 2: All Technicians --}}
+                        <div class="tab-pane fade" id="allTechPane" role="tabpanel" aria-labelledby="all-tech-tab">
+                            <p class="mb-1" style="font-size:13px; font-weight:600; color:#333;">
+                                All Technicians — {{ \Carbon\Carbon::parse($approvedDate)->format('F d, Y') }}
+                            </p>
+                            <p class="mb-2" style="font-size:12px; color:#666;">
+                                Overview of the full team's schedule for this day.
+                            </p>
+                            <div class="d-flex mb-2" style="gap:12px; font-size:11px; color:#666;">
+                                <span style="display:inline-flex;align-items:center;gap:4px;">
+                                    <span
+                                        style="width:12px;height:12px;border-radius:3px;background:#B5D4F4;border:0.5px solid #85B7EB;display:inline-block;"></span>
+                                    Existing appointment
+                                </span>
+                                <span style="display:inline-flex;align-items:center;gap:4px;">
+                                    <span
+                                        style="width:12px;height:12px;border-radius:3px;background:#C0DD97;border:0.5px solid #97C459;display:inline-block;"></span>
+                                    This appointment
+                                </span>
+                            </div>
+                            <div style="overflow-x:auto;">
+                                <div id="allTechTimeline" style="min-width:600px; padding-bottom:8px;"></div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">
+                        <span class="fa fa-times"></span> Close
+                    </button>
+                    <button type="submit" class="btn btn-success">
+                        <span class="fa fa-save"></span> Assign
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+help me with assessed_appointments_view_assign, we just update in the table
+
+service_appointments
+svca_status = 'ASSIGNED'
+svca_date_modified = Carbon::now(),
+svca_modified_by = session('usr_id')
+
+insert in the table
+service_appointment_schedules
+svcas_uuid = generateuuid(),
+svca_id = the svca_id im currently
+svcas_assigned_to = the value the usr_id we select in the technician 
+svcas_date_assigned = Carbon::now(),
+svcas_date_created = Carbon::now(),
+svcas_created_by = session('usr_id'),
+svcas_active = 1
