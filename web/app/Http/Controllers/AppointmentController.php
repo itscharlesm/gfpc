@@ -1272,6 +1272,8 @@ class AppointmentController extends Controller
             ->leftJoin('user_addresses', 'service_appointments.uadd_id', '=', 'user_addresses.uadd_id')
             ->leftJoin('addresses', 'user_addresses.add_id', '=', 'addresses.add_id')
             ->leftJoin('users as approver', 'service_appointments.svca_approved_by', '=', 'approver.usr_id')
+            ->leftJoin('service_appointment_schedules', 'service_appointments.svca_id', '=', 'service_appointment_schedules.svca_id')
+            ->leftJoin('users as assigned_to', 'service_appointment_schedules.svcas_assigned_to', '=', 'assigned_to.usr_id')
             ->where('services.svc_id', $svc_id)
             ->select(
                 'services.svc_id',
@@ -1313,6 +1315,9 @@ class AppointmentController extends Controller
                 'service_appointments.svca_date_approved',
                 'approver.usr_first_name as approved_first_name',
                 'approver.usr_last_name as approved_last_name',
+                'service_appointment_schedules.svcas_date_assigned',
+                'assigned_to.usr_first_name as assigned_first_name',
+                'assigned_to.usr_last_name as assigned_last_name',
                 'user_addresses.uadd_street',
                 'user_addresses.uadd_barangay',
                 'user_addresses.uadd_city',
