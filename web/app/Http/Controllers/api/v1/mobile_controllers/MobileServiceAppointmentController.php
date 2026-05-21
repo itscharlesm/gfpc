@@ -344,7 +344,7 @@ class MobileServiceAppointmentController extends Controller
                 'sa.svca_date_created',
 
                 's.svc_is_termite',
-                's.svc_initial_price',
+                's.svc_balance',
 
                 'ua.uadd_street',
                 'ua.uadd_barangay',
@@ -355,6 +355,43 @@ class MobileServiceAppointmentController extends Controller
             )
             ->orderBy('sa.svca_date_created', 'desc')
             ->get();
+        
+        $appointments->transform(function ($appointment) {
+            $pests = DB::table('service_order_pests as sop')
+                ->join('service_packages as sp', 'sop.svcp_id', '=', 'sp.svcp_id')
+                ->where('sop.svc_id', $appointment->svc_id)
+                ->where('sop.svcop_active', 1)
+                ->where('sp.svcp_active', 1)
+                ->pluck('sp.svcp_pest_type')
+                ->toArray();
+
+            $appointment->fullPestTypes = implode(', ', $pests);
+
+            return $appointment;
+        });
+
+        $appointments->transform(function ($appointment) {
+            $pests = DB::table('service_order_pests as sop')
+                ->join('service_packages as sp', 'sop.svcp_id', '=', 'sp.svcp_id')
+                ->where('sop.svc_id', $appointment->svc_id)
+                ->where('sop.svcop_active', 1)
+                ->where('sp.svcp_active', 1)
+                ->pluck('sp.svcp_pest_type')
+                ->toArray();
+
+            $areas = DB::table('service_orders as so')
+                ->join('service_package_areas as spa', 'so.svcpa_id', '=', 'spa.svcpa_id')
+                ->where('so.svc_id', $appointment->svc_id)
+                ->where('so.svco_active', 1)
+                ->where('spa.svcpa_active', 1)
+                ->pluck('spa.svcpa_area')
+                ->toArray();
+
+            $appointment->fullPestTypes = implode(', ', $pests);
+            $appointment->areaTypes = implode(', ', $areas);
+
+            return $appointment;
+        });
 
         return response()->json([
             'success' => true,
