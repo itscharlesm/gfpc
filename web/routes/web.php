@@ -105,6 +105,7 @@ Route::get('service/orders/appointments/assessed', [AppointmentController::class
 Route::get('service/orders/appointments/assessed/{svc_id}', [AppointmentController::class, 'assessed_appointments_view']);
 Route::post('service/orders/appointments/assessed/assign', [AppointmentController::class, 'assessed_appointments_view_assign']);
 // - Scheduled Appointments
+Route::get('service/orders/appointments/scheduled', [AppointmentController::class, 'scheduled_appointments']);
 Route::get('service/orders/appointments/scheduled/{svc_id}', [AppointmentController::class, 'scheduled_appointments_view']);
 Route::post('service/orders/appointments/scheduled/update/technician/{svc_id}', [AppointmentController::class, 'scheduled_appointments_view_update_technician']);
 // - Ongoing Appointments

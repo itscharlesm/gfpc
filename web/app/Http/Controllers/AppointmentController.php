@@ -1263,6 +1263,59 @@ class AppointmentController extends Controller
     // END ASSESSED APPOINTMENTS
 
     // START SCHEDULED APPOINTMENTS
+    public function scheduled_appointments(Request $request)
+    {
+        $search = $request->search ?? '';
+        $sessionBranchId = session('branch_id');
+
+        $query = DB::table('services')
+            ->leftJoin('users', 'services.usr_id', '=', 'users.usr_id')
+            ->leftJoin('branches', 'services.branch_id', '=', 'branches.branch_id')
+            ->leftJoin('service_appointments', 'service_appointments.svc_id', '=', 'services.svc_id')
+            ->where('services.svc_active', 1)
+            ->where('services.svc_status', 'SCHEDULED');
+
+        // Branch filter
+        if ($sessionBranchId != 1) {
+            $query->where('services.branch_id', $sessionBranchId);
+        }
+
+        $query->select(
+            'services.svc_id',
+            'services.svc_sa_number',
+            'services.svc_is_termite',
+            'services.svc_is_package',
+            'services.svc_status',
+            'services.svc_payment_status',
+            'services.svc_date_created',
+            'users.usr_first_name',
+            'users.usr_last_name',
+            'users.usr_email',
+            'users.usr_mobile',
+            'branches.branch_name',
+            'service_appointments.svca_approved_date',
+            'service_appointments.svca_approved_time_from',
+            'service_appointments.svca_approved_time_to'
+        );
+
+        // Search
+        if (!empty($search)) {
+            $query->where(function ($q) use ($search) {
+                $q->where('users.usr_first_name', 'LIKE', "%$search%")
+                    ->orWhere('users.usr_last_name', 'LIKE', "%$search%")
+                    ->orWhere('users.usr_email', 'LIKE', "%$search%")
+                    ->orWhere('users.usr_mobile', 'LIKE', "%$search%")
+                    ->orWhere('branches.branch_name', 'LIKE', "%$search%");
+            });
+        }
+
+        $query->orderBy('services.svc_date_created', 'asc');
+
+        $appointments = $query->paginate(50);
+
+        return view('service_orders.appointments.scheduled.scheduled', compact('appointments', 'search'));
+    }
+
     public function scheduled_appointments_view($svc_id)
     {
         $display = DB::table('services')

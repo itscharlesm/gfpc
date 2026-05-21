@@ -119,6 +119,7 @@
             </div>
         </div>
     </section>
+    
     {{-- Dynamic Search While Typing --}}
     <script>
         document.getElementById("searchInput").addEventListener("keyup", function() {
