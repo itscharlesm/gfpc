@@ -1,431 +1,328 @@
-sample save in the database:
-public function requested_appointments_view_assess_confirmation(Request $request)
-{
-    $request->validate([
-        'svc_id' => 'required',
-        'svc_sa_number' => 'required',
-        'svc_infestation' => 'required',
-        'svc_location_price' => 'required|numeric',
-        'svc_final_price' => 'required|numeric',
-        'svca_approved_date' => 'required',
-        'svca_approved_time_from' => 'required',
-        'svca_approved_time_to' => 'required',
-    ]);
+<script>
+        (function() {
+            const HOURS_START = 0;
+            const HOURS_END = 24;
+            const TOTAL_HRS = HOURS_END - HOURS_START;
+            const ROW_HEIGHT = 36;
 
-    $svc_id = $request->svc_id;
+            const NEW_FROM_STR = "{{ $approvedTimeFrom }}";
+            const NEW_TO_STR = "{{ $approvedTimeTo }}";
+            const DAY_SCHEDULES = @json($daySchedules);
 
-    if (
-        DB::table('services')
-            ->where('svc_sa_number', $request->svc_sa_number)
-            ->where('svc_id', '!=', $svc_id)
-            ->exists()
-    ) {
+            // ── FIX 1 & 2: current assigned technician ID ──
+            const CURRENT_TECH_ID = "{{ $display->current_technician_id }}";
 
-        session()->flash('errorMessage', 'SA Number already exists.');
-        return redirect()->back();
-    }
-
-    $svc_id = $request->svc_id;
-    $isTermite = $request->svc_is_termite;
-    $isPackage = $request->svc_is_package;
-    $servicePrice = $request->svc_location_price;
-    $finalPrice = $request->svc_final_price;
-
-    $service = DB::table('services')->where('svc_id', $svc_id)->first();
-
-    // ← NEW: shared fields (mirrors assess method)
-    $sharedFields = [
-        'svc_sa_number' => $request->svc_sa_number,
-        'svc_property_type' => $request->svc_property_type,
-        'svc_km_distance' => $request->svc_km_distance,
-        'svc_fixed_price' => $request->svc_fixed_price,
-        'svc_chemical_quantity' => $request->svc_chemical_quantity,
-        'svc_chemical_metric' => $request->svc_chemical_metric,
-        'svc_assessment_recommendation' => $request->svc_assessment_recommendation,
-    ];
-
-    if ($isTermite == 1) {
-        $treatmentType = $request->svc_type_treatment;
-        $withDevice = ($treatmentType === 'HYBRID TREATMENT') ? 1 : 0;
-        $deviceCount = $withDevice ? (int) $request->svc_device_count : null;
-        $sqmInitial = $request->svc_sqm_initial ?? $service->svc_sqm_initial;
-
-        $deviceCostRow = DB::table('service_package_area_devices')
-            ->where('branch_id', $service->branch_id)
-            ->where('svcpad_active', 1)
-            ->first();
-
-        $devicePrice = ($withDevice && $deviceCount && $deviceCostRow)
-            ? $deviceCount * $deviceCostRow->svcpad_cost
-            : 0;
-
-        DB::table('services')
-            ->where('svc_id', $svc_id)
-            ->update(array_merge($sharedFields, [   // ← merged
-                'svc_is_termite' => 1,
-                'svcpat_id' => $request->svcpat_id,
-                'svc_type_treatment' => $treatmentType,
-                'svc_with_device' => $withDevice,
-                'svc_device_count' => $deviceCount,
-                'svc_device_price' => $devicePrice,
-                'svc_sqm_initial' => $sqmInitial,
-                'svc_sqm_final' => $sqmInitial,
-                'svc_status' => 'ASSESSED',
-                'svc_infestation' => $request->svc_infestation,
-                'svc_location_price' => $servicePrice,
-                'svc_final_price' => $finalPrice,
-                'svc_balance' => $finalPrice,
-                'svc_date_modified' => Carbon::now(),
-                'svc_modified_by' => session('usr_id'),
-            ]));
-
-        DB::table('service_orders')
-            ->where('svc_id', $svc_id)
-            ->update([
-                'svcpat_id' => $request->svcpat_id,
-                'svco_date_modified' => Carbon::now(),
-                'svco_modified_by' => session('usr_id'),
-            ]);
-
-    } else {
-        $sqmInitial = $service->svc_sqm_initial;
-        if ($isPackage == 0 && is_null($service->svc_sqm_initial)) {
-            $sqmInitial = null;
-        } elseif ($isPackage == 1) {
-            $sqmInitial = $request->svc_sqm_initial ?? $service->svc_sqm_initial;
-        }
-
-        DB::table('services')
-            ->where('svc_id', $svc_id)
-            ->update(array_merge($sharedFields, [   // ← merged
-                'svc_is_package' => $isPackage,
-                'svc_sqm_initial' => $sqmInitial,
-                'svc_sqm_final' => $isPackage == 1 ? $sqmInitial : null,
-                'svc_status' => 'ASSESSED',
-                'svc_infestation' => $request->svc_infestation,
-                'svc_location_price' => $servicePrice,
-                'svc_initial_price' => $request->svc_initial_price ?? $service->svc_initial_price,
-                'svc_final_price' => $finalPrice,
-                'svc_balance' => $finalPrice,
-                'svc_date_modified' => Carbon::now(),
-                'svc_modified_by' => session('usr_id'),
-            ]));
-    }
-
-    DB::table('service_appointments')
-        ->where('svc_id', $svc_id)
-        ->update([
-            'svca_approved_date' => $request->svca_approved_date,
-            'svca_approved_time_from' => $request->svca_approved_time_from,
-            'svca_approved_time_to' => $request->svca_approved_time_to,
-            'svca_date_approved' => Carbon::now(),
-            'svca_approved_by' => session('usr_id'),
-            'svca_date_modified' => Carbon::now(),
-            'svca_modified_by' => session('usr_id'),
-        ]);
-
-    $serviceOrder = 'SA-' . str_pad($svc_id, 6, '0', STR_PAD_LEFT);
-
-    logUserActivity('Manage Appointments', 'Confirmed Assessment ' . $serviceOrder);
-
-    session()->flash('successMessage', 'Appointment successfully assessed.');
-    return redirect()->action(
-        [AppointmentController::class, 'assessed_appointments_view'],
-        ['svc_id' => $svc_id]
-    );
-}
-
-assign technician
-
-Route::get('service/orders/appointments/assessed/assign', [AppointmentController::class, 'assessed_appointments_view_assign']);
-
-public function assessed_appointments_view($svc_id)
-{
-    $display = DB::table('services')
-        ->leftJoin('users', 'services.usr_id', '=', 'users.usr_id')
-        ->leftJoin('branches', 'services.branch_id', '=', 'branches.branch_id')
-        ->leftJoin('service_appointments', 'services.svc_id', '=', 'service_appointments.svc_id')
-        ->leftJoin('user_addresses', 'service_appointments.uadd_id', '=', 'user_addresses.uadd_id')
-        ->leftJoin('addresses', 'user_addresses.add_id', '=', 'addresses.add_id')
-        ->leftJoin('users as approver', 'service_appointments.svca_approved_by', '=', 'approver.usr_id')
-        ->where('services.svc_id', $svc_id)
-        ->select(
-            'services.svc_id',
-            'services.svc_sa_number',
-            'services.svc_km_distance',
-            'services.svc_property_type',
-            'services.svc_is_package',
-            'services.svcpat_id',
-            'services.svc_is_termite',
-            'services.svc_type_treatment',
-            'services.svc_sqm_initial',
-            'services.svc_sqm_final',
-            'services.svc_with_device',
-            'services.svc_device_count',
-            'services.svc_problem_description',
-            'services.svc_status',
-            'services.svc_infestation',
-            'services.svc_initial_price',
-            'services.svc_location_price',
-            'services.svc_device_price',
-            'services.svc_fixed_price',
-            'services.svc_final_price',
-            'services.svc_balance',
-            'services.svc_payment_status',
-            'services.svc_assessment_recommendation',
-            'services.svc_chemical_quantity',
-            'services.svc_chemical_metric',
-            'users.usr_first_name',
-            'users.usr_last_name',
-            'users.usr_email',
-            'users.usr_mobile',
-            'branches.branch_id',
-            'branches.branch_name',
-            'service_appointments.svca_client_date',
-            'service_appointments.svca_client_time',
-            'service_appointments.svca_approved_date',
-            'service_appointments.svca_approved_time_from',
-            'service_appointments.svca_approved_time_to',
-            'service_appointments.svca_date_approved',
-            'approver.usr_first_name as approved_first_name',
-            'approver.usr_last_name as approved_last_name',
-            'user_addresses.uadd_street',
-            'user_addresses.uadd_barangay',
-            'user_addresses.uadd_city',
-            'user_addresses.uadd_province',
-            'user_addresses.uadd_region',
-            'addresses.add_name'
-        )
-        ->first();
-
-    // Pest Types for this service
-    $pestTypes = DB::table('service_order_pests')
-        ->leftJoin('service_packages', 'service_order_pests.svcp_id', '=', 'service_packages.svcp_id')
-        ->where('service_order_pests.svc_id', $svc_id)
-        ->where('service_order_pests.svcop_active', 1)
-        ->select(
-            'service_order_pests.svcop_id',
-            'service_packages.svcp_id',
-            'service_packages.svcp_pest_type'
-        )
-        ->get();
-
-    // Service Orders with Areas (non-termite: svcpat_id IS NULL)
-    $serviceAreas = DB::table('service_orders')
-        ->leftJoin('service_package_areas', 'service_orders.svcpa_id', '=', 'service_package_areas.svcpa_id')
-        ->where('service_orders.svc_id', $svc_id)
-        ->whereNull('service_orders.svcpat_id')
-        ->where('service_orders.svco_active', 1)
-        ->select(
-            'service_orders.svco_id',
-            'service_package_areas.svcpa_id',
-            'service_package_areas.svcpa_area',
-            'service_package_areas.svcpa_cost'
-        )
-        ->get();
-
-    // Service Orders with Termite Areas (termite: svcpat_id IS NOT NULL)
-    $termiteAreas = DB::table('service_orders')
-        ->leftJoin('service_package_area_termites', 'service_orders.svcpat_id', '=', 'service_package_area_termites.svcpat_id')
-        ->where('service_orders.svc_id', $svc_id)
-        ->whereNotNull('service_orders.svcpat_id')
-        ->where('service_orders.svco_active', 1)
-        ->select(
-            'service_orders.svco_id',
-            'service_package_area_termites.svcpat_id',
-            'service_package_area_termites.svcpat_sqm_details',
-            'service_package_area_termites.svcpat_cost'
-        )
-        ->get();
-
-    // Client Appointment Images
-    $appointmentImages = DB::table('service_appointment_images')
-        ->join('service_appointments', 'service_appointment_images.svca_id', '=', 'service_appointments.svca_id')
-        ->where('service_appointments.svc_id', $svc_id)
-        ->where('service_appointment_images.svcap_active', 1)
-        ->select('service_appointment_images.*')
-        ->get();
-
-    $approvedDate = null;
-    $approvedTimeFrom = null;
-    $approvedTimeTo = null;
-
-    $appointment = DB::table('service_appointments')
-        ->where('svc_id', $svc_id)
-        ->first();
-
-    if ($appointment) {
-        $approvedDate = $appointment->svca_approved_date;
-        $approvedTimeFrom = $appointment->svca_approved_time_from;
-        $approvedTimeTo = $appointment->svca_approved_time_to;
-    }
-
-    // Day-of-week name from approved date (MONDAY, TUESDAY, etc.)
-    $dayName = $approvedDate
-        ? strtoupper(Carbon::parse($approvedDate)->format('l'))
-        : null;
-
-    // Technicians
-    $technicians = DB::table('users')
-        ->where('utyp_id', 2)
-        ->where('usr_active', 1)
-        ->where('branch_id', $display->branch_id)
-        ->orderBy('usr_last_name', 'asc')
-        ->select('usr_id', 'usr_first_name', 'usr_last_name')
-        ->get()
-        ->map(function ($tech) use ($dayName, $approvedDate, $approvedTimeFrom, $approvedTimeTo) {
-            // Check rest day
-            $isRestDay = false;
-            if ($dayName) {
-                $avail = DB::table('user_availabilities')
-                    ->where('usr_id', $tech->usr_id)
-                    ->where('uavail_name', $dayName)
-                    ->first();
-                $isRestDay = !$avail || $avail->uavail_active == 0;
+            function parseTime(str) {
+                if (!str) return null;
+                const parts = str.split(':');
+                return parseInt(parts[0]) + parseInt(parts[1]) / 60;
             }
 
-            // Check existing assignments that overlap
-            $isBusy = false;
-            if ($approvedDate && $approvedTimeFrom && $approvedTimeTo) {
-                $conflict = DB::table('service_appointment_schedules')
-                    ->join('service_appointments', 'service_appointments.svca_id', '=', 'service_appointment_schedules.svca_id')
-                    ->where('service_appointment_schedules.svcas_assigned_to', $tech->usr_id)
-                    ->where('service_appointment_schedules.svcas_active', 1)
-                    ->where('service_appointments.svca_approved_date', $approvedDate)
-                    ->where('service_appointments.svca_approved_time_from', '<', $approvedTimeTo)
-                    ->where('service_appointments.svca_approved_time_to', '>', $approvedTimeFrom)
-                    ->first();
-                $isBusy = (bool) $conflict;
+            const NEW_FROM = parseTime(NEW_FROM_STR);
+            const NEW_TO = parseTime(NEW_TO_STR);
+
+            function pct(h) {
+                return ((h - HOURS_START) / TOTAL_HRS * 100).toFixed(4) + '%';
             }
 
-            $tech->is_rest_day = $isRestDay;
-            $tech->is_busy = $isBusy;
-            return $tech;
-        });
+            // ── FIX 1: show timeline immediately when modal opens if a tech is pre-selected ──
+            $('#changeTechnicianModal').on('shown.bs.modal', function() {
+                const select = document.getElementById('technicianSelect');
+                if (!select) return;
 
-    // Existing schedules for the timeline (all techs, same date)
-    $daySchedules = [];
-    if ($approvedDate) {
-        $rows = DB::table('service_appointment_schedules')
-            ->join('service_appointments', 'service_appointments.svca_id', '=', 'service_appointment_schedules.svca_id')
-            ->join('services', 'services.svc_id', '=', 'service_appointments.svc_id')
-            ->join('users as clients', 'clients.usr_id', '=', 'services.usr_id')
-            ->leftJoin('user_addresses', 'service_appointments.uadd_id', '=', 'user_addresses.uadd_id')
-            ->leftJoin('users as assigner', 'assigner.usr_id', '=', 'service_appointment_schedules.svcas_assigned_by')
-            ->where('service_appointment_schedules.svcas_active', 1)
-            ->where('service_appointments.svca_approved_date', $approvedDate)
-            ->select(
-                'service_appointment_schedules.svcas_assigned_to',
-                'service_appointment_schedules.svcas_date_assigned',
-                'service_appointment_schedules.svcas_assigned_by',
-                'assigner.usr_first_name as assigner_first_name',
-                'assigner.usr_last_name as assigner_last_name',
-                'service_appointments.svca_approved_time_from',
-                'service_appointments.svca_approved_time_to',
-                'clients.usr_first_name',
-                'clients.usr_last_name',
-                'clients.usr_email',
-                'clients.usr_mobile',
-                'user_addresses.uadd_street',
-                'user_addresses.uadd_barangay',
-                'user_addresses.uadd_city',
-                'user_addresses.uadd_province',
-                'user_addresses.uadd_region',
-                'services.svc_km_distance'
-            )
-            ->get();
+                // Find the selected option that is NOT disabled
+                const selected = Array.from(select.options).find(o => o.selected && !o.disabled);
+                if (selected && selected.value) {
+                    document.getElementById('techTimelineWrap').style.display = 'block';
+                    document.getElementById('noTechSelected').style.display = 'none';
+                    renderTimeline(selected.value);
+                }
+            });
 
-        foreach ($rows as $row) {
-            $daySchedules[$row->svcas_assigned_to][] = $row;
-        }
-    }
+            document.getElementById('technicianSelect').addEventListener('change', function() {
+                const techId = this.value;
+                const wrap = document.getElementById('techTimelineWrap');
+                const noTechMsg = document.getElementById('noTechSelected');
 
-    $allTechs = $technicians->map(function ($t) {
-        return [
-            'id' => $t->usr_id,
-            'label' => $t->usr_last_name . ', ' . substr($t->usr_first_name, 0, 1) . '.',
-            'is_rest' => $t->is_rest_day,
-            'is_busy' => $t->is_busy,
-        ];
-    })->values();
+                if (!techId) {
+                    wrap.style.display = 'none';
+                    noTechMsg.style.display = 'block';
+                    return;
+                }
 
-    return view('service_orders.appointments.assessed.view_assessed', compact('display', 'pestTypes', 'serviceAreas', 'termiteAreas', 'appointmentImages', 'technicians', 'approvedDate', 'approvedTimeFrom', 'approvedTimeTo', 'daySchedules', 'allTechs'));
-}
+                wrap.style.display = 'block';
+                noTechMsg.style.display = 'none';
+                renderTimeline(techId);
+            });
 
-{{-- Assign Technician Modal --}}
-<div class="modal fade" id="assignTechnicianModal" tabindex="-1" role="dialog"
-    aria-labelledby="assignTechnicianModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-xl" role="document">
-        <form action="{{ url('management/service-orders/assign-technician') }}" method="POST">
-            @csrf
-            <div class="modal-content">
-                <div class="modal-header bg-success text-white">
-                    <h5 class="modal-title text-white" id="assignTechnicianModalLabel">
-                        <span class="fa fa-user text-white"></span> Assign Technician
-                    </h5>
-                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
+            function renderTimeline(techId) {
+                const container = document.getElementById('techTimeline');
+                container.innerHTML = '';
 
-                <div class="modal-body">
-                    <input type="hidden" name="svc_id" value="{{ $display->svc_id }}">
+                // Hour axis
+                const axis = document.createElement('div');
+                axis.style.cssText = `display:flex; margin-left:0; position:relative; height:20px; margin-bottom:4px;`;
+                for (let h = HOURS_START; h <= HOURS_END; h++) {
+                    const span = document.createElement('span');
+                    const leftPct = ((h - HOURS_START) / TOTAL_HRS * 100).toFixed(4) + '%';
+                    span.style.cssText =
+                        `position:absolute; left:${leftPct}; transform:translateX(-50%); font-size:10px; color:#999; white-space:nowrap;`;
+                    const h12 = h === 0 || h === 24 ? 12 : h > 12 ? h - 12 : h;
+                    const ampm = h < 12 || h === 0 ? 'am' : 'pm';
+                    span.textContent = h12 + ampm;
+                    axis.appendChild(span);
+                }
+                container.appendChild(axis);
 
-                    <div class="form-group mb-3">
-                        <label>Assign Technician <span class="text-danger">*</span></label>
-                        <select class="form-control" name="svcas_assigned_to" id="technicianSelect" required>
-                            <option value="" disabled selected>Select Technician</option>
-                            @foreach ($technicians as $tech)
-                                @php
-                                    $label = $tech->usr_last_name . ', ' . $tech->usr_first_name;
-                                    $disabled = $tech->is_rest_day || $tech->is_busy;
-                                    $suffix = $tech->is_rest_day
-                                        ? ' — (Rest Day)'
-                                        : ($tech->is_busy
-                                            ? ' — (Not Available)'
-                                            : '');
-                                @endphp
-                                <option value="{{ $tech->usr_id }}" data-rest="{{ $tech->is_rest_day ? 1 : 0 }}"
-                                    data-busy="{{ $tech->is_busy ? 1 : 0 }}"
-                                    @if ($disabled) disabled @endif>
-                                    {{ $label }}{{ $suffix }}
-                                </option>
-                            @endforeach
-                        </select>
+                const rowWrap = document.createElement('div');
+                rowWrap.style.cssText = `display:flex; align-items:center; margin-bottom:2px;`;
+
+                const track = document.createElement('div');
+                track.style.cssText =
+                    `flex:1; position:relative; height:${ROW_HEIGHT}px; background:#f7f7f7; border:0.5px solid #ddd; border-radius:6px; overflow:visible;`;
+
+                // Hour grid lines
+                for (let h = HOURS_START; h <= HOURS_END; h++) {
+                    const line = document.createElement('div');
+                    line.style.cssText =
+                        `position:absolute; top:0; bottom:0; left:${pct(h)}; width:0.5px; background:#e0e0e0;`;
+                    track.appendChild(line);
+                }
+
+                // Existing appointment blocks for this technician
+                const existingSlots = DAY_SCHEDULES[techId] || [];
+                existingSlots.forEach(ev => {
+                    const evFrom = parseTime(ev.svca_approved_time_from);
+                    const evTo = parseTime(ev.svca_approved_time_to);
+                    if (evFrom === null || evTo === null) return;
+                    const dispFrom = Math.max(evFrom, HOURS_START);
+                    const dispTo = Math.min(evTo, HOURS_END);
+                    if (dispFrom >= dispTo) return;
+
+                    const contactParts = [
+                        'Email: ' + ev.usr_email,
+                        'Number: 0' + ev.usr_mobile
+                    ].filter(p => p && p.trim());
+
+                    const addressParts = [
+                        'Address: ' + ev.uadd_street,
+                        ev.uadd_barangay,
+                        ev.uadd_city,
+                        ev.uadd_province,
+                        ev.uadd_region
+                    ].filter(p => p && p.trim());
+
+                    const distanceLine = ev.svc_km_distance ?
+                        'Distance: ' + ev.svc_km_distance + 'KM from office' :
+                        null;
+
+                    let dateAssignedLine = null;
+                    if (ev.svcas_date_assigned) {
+                        const d = new Date(ev.svcas_date_assigned);
+                        const mm = String(d.getMonth() + 1).padStart(2, '0');
+                        const dd = String(d.getDate()).padStart(2, '0');
+                        const yyyy = d.getFullYear();
+                        dateAssignedLine = 'Date Assigned: ' + mm + '/' + dd + '/' + yyyy;
+                    }
+
+                    const assignedByLine = (ev.assigner_first_name && ev.assigner_last_name) ?
+                        'Assigned By: ' + ev.assigner_first_name + ' ' + ev.assigner_last_name :
+                        null;
+
+                    const addr = [
+                        ...contactParts,
+                        addressParts.join(', '),
+                        distanceLine,
+                        dateAssignedLine,
+                        assignedByLine
+                    ].filter(Boolean).join('<br>');
+
+                    track.appendChild(makeBlock(
+                        dispFrom, dispTo,
+                        ev.usr_first_name + ' ' + ev.usr_last_name,
+                        addr,
+                        '#B5D4F4', '#0C447C', '#85B7EB'
+                    ));
+                });
+
+                // ── FIX 2: "This appointment" block color depends on whether selected tech is the assigned one ──
+                if (NEW_FROM !== null && NEW_TO !== null) {
+                    const dispFrom = Math.max(NEW_FROM, HOURS_START);
+                    const dispTo = Math.min(NEW_TO, HOURS_END);
+                    const isAssigned = String(techId) === String(CURRENT_TECH_ID);
+
+                    if (dispFrom < dispTo) {
+                        track.appendChild(makeBlock(
+                            dispFrom, dispTo,
+                            'This appointment', '',
+                            isAssigned ? '#B5D4F4' : '#C0DD97',
+                            isAssigned ? '#0C447C' : '#27500A',
+                            isAssigned ? '#85B7EB' : '#97C459'
+                        ));
+                    }
+                }
+
+                rowWrap.appendChild(track);
+                container.appendChild(rowWrap);
+            }
+
+            function makeBlock(from, to, label, addr, bg, color, border) {
+                const blk = document.createElement('div');
+                const leftPct = ((from - HOURS_START) / TOTAL_HRS * 100).toFixed(4) + '%';
+                const widthPct = ((to - from) / TOTAL_HRS * 100).toFixed(4) + '%';
+                blk.style.cssText = [
+                    'position:absolute; top:4px; bottom:4px;',
+                    'left:' + leftPct + '; width:' + widthPct + ';',
+                    'background:' + bg + '; color:' + color + '; border:0.5px solid ' + border + ';',
+                    'border-radius:5px; display:flex; align-items:center; justify-content:center;',
+                    'font-size:11px; font-weight:500; overflow:hidden; white-space:nowrap;',
+                    'text-overflow:ellipsis; padding:0 6px; cursor:default;'
+                ].join('');
+                blk.textContent = label;
+                blk.addEventListener('mouseenter', e => showTooltip(e, label, addr));
+                blk.addEventListener('mousemove', moveTooltip);
+                blk.addEventListener('mouseleave', hideTooltip);
+                return blk;
+            }
+
+            let tt = null;
+
+            function ensureTT() {
+                if (!tt) {
+                    tt = document.createElement('div');
+                    tt.style.cssText = [
+                        'position:fixed; background:#fff; border:0.5px solid #ccc;',
+                        'border-radius:8px; padding:8px 12px; font-size:12px;',
+                        'pointer-events:none; z-index:9999; display:none;',
+                        'box-shadow:0 4px 12px rgba(0,0,0,.08); max-width:220px; line-height:1.5;'
+                    ].join('');
+                    document.body.appendChild(tt);
+                }
+            }
+
+            function showTooltip(e, label, addr) {
+                ensureTT();
+                tt.innerHTML = '<strong>' + label + '</strong>' + (addr ? '<br>' + addr : '');
+                tt.style.display = 'block';
+                moveTooltip(e);
+            }
+
+            function moveTooltip(e) {
+                if (tt) {
+                    tt.style.left = (e.clientX + 14) + 'px';
+                    tt.style.top = (e.clientY + 14) + 'px';
+                }
+            }
+
+            function hideTooltip() {
+                if (tt) tt.style.display = 'none';
+            }
+        })();
+    </script>
+
+    <div class="modal fade" id="changeTechnicianModal" tabindex="-1" role="dialog"
+        aria-labelledby="changeTechnicianModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl" role="document">
+            <form action="{{ url('service/orders/appointments/scheduled/update/technician/' . $display->svc_id) }}"
+                method="POST">
+                @csrf
+                <div class="modal-content">
+                    <div class="modal-header bg-success text-white">
+                        <h5 class="modal-title text-white" id="changeTechnicianModalLabel">
+                            <span class="fa fa-user text-white"></span> Change Technician
+                        </h5>
+                        <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
                     </div>
 
-                    <hr>
+                    <div class="modal-body">
+                        <input type="hidden" name="svc_id" value="{{ $display->svc_id }}">
 
-                    {{-- Tab Navigation --}}
-                    <ul class="nav nav-tabs" id="timelineTabs" role="tablist">
-                        <li class="nav-item">
-                            <a class="nav-link active" id="selected-tech-tab" data-toggle="tab"
-                                href="#selectedTechPane" role="tab" aria-controls="selectedTechPane"
-                                aria-selected="true">
-                                <span class="fa fa-user mr-1"></span> Selected Technician
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" id="all-tech-tab" data-toggle="tab" href="#allTechPane"
-                                role="tab" aria-controls="allTechPane" aria-selected="false">
-                                <span class="fa fa-users mr-1"></span> All Technicians
-                            </a>
-                        </li>
-                    </ul>
+                        <div class="form-group mb-3">
+                            <label>Change Technician <span class="text-danger">*</span></label>
+                            <select class="form-control" name="svcas_assigned_to" id="technicianSelect" required>
+                                <option value="" disabled selected>Select Technician</option>
+                                @foreach ($technicians as $tech)
+                                    @php
+                                        $isCurrentTech = $display->current_technician_id == $tech->usr_id;
+                                        $label = $tech->usr_last_name . ', ' . $tech->usr_first_name;
+                                        $disabled = !$isCurrentTech && ($tech->is_rest_day || $tech->is_busy);
+                                        $suffix = $isCurrentTech
+                                            ? ' — (Currently Assigned)'
+                                            : ($tech->is_rest_day
+                                                ? ' — (Rest Day)'
+                                                : ($tech->is_busy
+                                                    ? ' — (Not Available)'
+                                                    : ''));
+                                    @endphp
+                                    <option value="{{ $tech->usr_id }}" data-rest="{{ $tech->is_rest_day ? 1 : 0 }}"
+                                        data-busy="{{ $tech->is_busy ? 1 : 0 }}" {{ $isCurrentTech ? 'selected' : '' }}
+                                        {{ $disabled ? 'disabled' : '' }}>
+                                        {{ $label }}{{ $suffix }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
 
-                    {{-- Tab Content --}}
-                    <div class="tab-content pt-3" id="timelineTabContent">
+                        <hr>
 
-                        {{-- Tab 1: Selected Technician --}}
-                        <div class="tab-pane fade show active" id="selectedTechPane" role="tabpanel"
-                            aria-labelledby="selected-tech-tab">
-                            <p id="noTechSelected" class="text-muted" style="font-size:13px;">
-                                Select a technician above to view their schedule.
-                            </p>
-                            <div id="techTimelineWrap" style="display:none;">
-                                <p class="mb-2" style="font-size:13px; color:#666;">
-                                    Schedule for
-                                    <strong>{{ \Carbon\Carbon::parse($approvedDate)->format('F d, Y') }}</strong>
+                        {{-- Tab Navigation --}}
+                        <ul class="nav nav-tabs" id="timelineTabs" role="tablist">
+                            <li class="nav-item">
+                                <a class="nav-link active" id="selected-tech-tab" data-toggle="tab"
+                                    href="#selectedTechPane" role="tab" aria-controls="selectedTechPane"
+                                    aria-selected="true">
+                                    <span class="fa fa-user mr-1"></span> Selected Technician
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" id="all-tech-tab" data-toggle="tab" href="#allTechPane"
+                                    role="tab" aria-controls="allTechPane" aria-selected="false">
+                                    <span class="fa fa-users mr-1"></span> All Technicians
+                                </a>
+                            </li>
+                        </ul>
+
+                        {{-- Tab Content --}}
+                        <div class="tab-content pt-3" id="timelineTabContent">
+
+                            {{-- Tab 1: Selected Technician --}}
+                            <div class="tab-pane fade show active" id="selectedTechPane" role="tabpanel"
+                                aria-labelledby="selected-tech-tab">
+                                <p id="noTechSelected" class="text-muted" style="font-size:13px;">
+                                    Select a technician above to view their schedule.
+                                </p>
+                                <div id="techTimelineWrap" style="display:none;">
+                                    <p class="mb-2" style="font-size:13px; color:#666;">
+                                        Schedule for
+                                        <strong>{{ \Carbon\Carbon::parse($approvedDate)->format('F d, Y') }}</strong>
+                                    </p>
+                                    <div class="d-flex mb-2" style="gap:12px; font-size:11px; color:#666;">
+                                        <span style="display:inline-flex;align-items:center;gap:4px;">
+                                            <span
+                                                style="width:12px;height:12px;border-radius:3px;background:#B5D4F4;border:0.5px solid #85B7EB;display:inline-block;"></span>
+                                            Existing appointment
+                                        </span>
+                                        <span style="display:inline-flex;align-items:center;gap:4px;">
+                                            <span
+                                                style="width:12px;height:12px;border-radius:3px;background:#C0DD97;border:0.5px solid #97C459;display:inline-block;"></span>
+                                            This appointment
+                                        </span>
+                                    </div>
+                                    <div style="overflow-x:auto;">
+                                        <div id="techTimeline" style="min-width:600px; padding-bottom:8px;"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {{-- Tab 2: All Technicians --}}
+                            <div class="tab-pane fade" id="allTechPane" role="tabpanel" aria-labelledby="all-tech-tab">
+                                <p class="mb-1" style="font-size:13px; font-weight:600; color:#333;">
+                                    All Technicians — {{ \Carbon\Carbon::parse($approvedDate)->format('F d, Y') }}
+                                </p>
+                                <p class="mb-2" style="font-size:12px; color:#666;">
+                                    Overview of the full team's schedule for this day.
                                 </p>
                                 <div class="d-flex mb-2" style="gap:12px; font-size:11px; color:#666;">
                                     <span style="display:inline-flex;align-items:center;gap:4px;">
@@ -440,78 +337,22 @@ public function assessed_appointments_view($svc_id)
                                     </span>
                                 </div>
                                 <div style="overflow-x:auto;">
-                                    <div id="techTimeline" style="min-width:600px; padding-bottom:8px;"></div>
+                                    <div id="allTechTimeline" style="min-width:600px; padding-bottom:8px;"></div>
                                 </div>
                             </div>
-                        </div>
 
-                        {{-- Tab 2: All Technicians --}}
-                        <div class="tab-pane fade" id="allTechPane" role="tabpanel" aria-labelledby="all-tech-tab">
-                            <p class="mb-1" style="font-size:13px; font-weight:600; color:#333;">
-                                All Technicians — {{ \Carbon\Carbon::parse($approvedDate)->format('F d, Y') }}
-                            </p>
-                            <p class="mb-2" style="font-size:12px; color:#666;">
-                                Overview of the full team's schedule for this day.
-                            </p>
-                            <div class="d-flex mb-2" style="gap:12px; font-size:11px; color:#666;">
-                                <span style="display:inline-flex;align-items:center;gap:4px;">
-                                    <span
-                                        style="width:12px;height:12px;border-radius:3px;background:#B5D4F4;border:0.5px solid #85B7EB;display:inline-block;"></span>
-                                    Existing appointment
-                                </span>
-                                <span style="display:inline-flex;align-items:center;gap:4px;">
-                                    <span
-                                        style="width:12px;height:12px;border-radius:3px;background:#C0DD97;border:0.5px solid #97C459;display:inline-block;"></span>
-                                    This appointment
-                                </span>
-                            </div>
-                            <div style="overflow-x:auto;">
-                                <div id="allTechTimeline" style="min-width:600px; padding-bottom:8px;"></div>
-                            </div>
                         </div>
+                    </div>
 
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">
+                            <span class="fa fa-times"></span> Close
+                        </button>
+                        <button type="submit" class="btn btn-success">
+                            <span class="fa fa-save"></span> Assign
+                        </button>
                     </div>
                 </div>
-
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">
-                        <span class="fa fa-times"></span> Close
-                    </button>
-                    <button type="submit" class="btn btn-success">
-                        <span class="fa fa-save"></span> Assign
-                    </button>
-                </div>
-            </div>
-        </form>
+            </form>
+        </div>
     </div>
-</div>
-
-help me with assessed_appointments_view_assign, we just update in the table
-
-services
-svc_id = connect
-svc_status = 'SCHEDULED'
-
-service_appointments
-svc_id = connect
-svca_status = 'ASSIGNED'
-svca_date_modified = Carbon::now(),
-svca_modified_by = session('usr_id')
-
-insert in the table
-service_appointment_schedules
-svcas_uuid = generateuuid(),
-svca_id = the svca_id im currently
-svcas_assigned_to = the value the usr_id we select in the technician 
-svcas_date_assigned = Carbon::now(),
-svcas_date_created = Carbon::now(),
-svcas_created_by = session('usr_id'),
-svcas_active = 1
-
-logUserActivity('Manage Appointments', 'Assigned Technician ' . $serviceOrder);
-
-    session()->flash('successMessage', 'Assigned technician successfully.');
-    return redirect()->action(
-        [AppointmentController::class, 'scheduled_appointments_view'],
-        ['svc_id' => $svc_id]
-    );

@@ -1315,6 +1315,7 @@ class AppointmentController extends Controller
                 'service_appointments.svca_date_approved',
                 'approver.usr_first_name as approved_first_name',
                 'approver.usr_last_name as approved_last_name',
+                'service_appointment_schedules.svcas_assigned_to as current_technician_id',  // <-- added
                 'service_appointment_schedules.svcas_date_assigned',
                 'assigned_to.usr_first_name as assigned_first_name',
                 'assigned_to.usr_last_name as assigned_last_name',
@@ -1327,7 +1328,6 @@ class AppointmentController extends Controller
             )
             ->first();
 
-        // Pest Types for this service
         $pestTypes = DB::table('service_order_pests')
             ->leftJoin('service_packages', 'service_order_pests.svcp_id', '=', 'service_packages.svcp_id')
             ->where('service_order_pests.svc_id', $svc_id)
@@ -1339,7 +1339,6 @@ class AppointmentController extends Controller
             )
             ->get();
 
-        // Service Orders with Areas (non-termite: svcpat_id IS NULL)
         $serviceAreas = DB::table('service_orders')
             ->leftJoin('service_package_areas', 'service_orders.svcpa_id', '=', 'service_package_areas.svcpa_id')
             ->where('service_orders.svc_id', $svc_id)
@@ -1353,7 +1352,6 @@ class AppointmentController extends Controller
             )
             ->get();
 
-        // Service Orders with Termite Areas (termite: svcpat_id IS NOT NULL)
         $termiteAreas = DB::table('service_orders')
             ->leftJoin('service_package_area_termites', 'service_orders.svcpat_id', '=', 'service_package_area_termites.svcpat_id')
             ->where('service_orders.svc_id', $svc_id)
@@ -1367,7 +1365,6 @@ class AppointmentController extends Controller
             )
             ->get();
 
-        // Client Appointment Images
         $appointmentImages = DB::table('service_appointment_images')
             ->join('service_appointments', 'service_appointment_images.svca_id', '=', 'service_appointments.svca_id')
             ->where('service_appointments.svc_id', $svc_id)
@@ -1389,12 +1386,10 @@ class AppointmentController extends Controller
             $approvedTimeTo = $appointment->svca_approved_time_to;
         }
 
-        // Day-of-week name from approved date (MONDAY, TUESDAY, etc.)
         $dayName = $approvedDate
             ? strtoupper(Carbon::parse($approvedDate)->format('l'))
             : null;
 
-        // Technicians
         $technicians = DB::table('users')
             ->where('utyp_id', 2)
             ->where('usr_active', 1)
@@ -1403,7 +1398,6 @@ class AppointmentController extends Controller
             ->select('usr_id', 'usr_first_name', 'usr_last_name')
             ->get()
             ->map(function ($tech) use ($dayName, $approvedDate, $approvedTimeFrom, $approvedTimeTo) {
-                // Check rest day
                 $isRestDay = false;
                 if ($dayName) {
                     $avail = DB::table('user_availabilities')
@@ -1413,7 +1407,6 @@ class AppointmentController extends Controller
                     $isRestDay = !$avail || $avail->uavail_active == 0;
                 }
 
-                // Check existing assignments that overlap
                 $isBusy = false;
                 if ($approvedDate && $approvedTimeFrom && $approvedTimeTo) {
                     $conflict = DB::table('service_appointment_schedules')
@@ -1451,6 +1444,7 @@ class AppointmentController extends Controller
                     'assigner.usr_last_name as assigner_last_name',
                     'service_appointments.svca_approved_time_from',
                     'service_appointments.svca_approved_time_to',
+                    'service_appointments.svc_id as appt_svc_id',   // <-- added to identify THIS appointment
                     'clients.usr_first_name',
                     'clients.usr_last_name',
                     'clients.usr_email',
@@ -1478,7 +1472,43 @@ class AppointmentController extends Controller
             ];
         })->values();
 
-        return view('service_orders.appointments.scheduled.view_scheduled', compact('display', 'pestTypes', 'serviceAreas', 'termiteAreas', 'appointmentImages', 'technicians', 'approvedDate', 'approvedTimeFrom', 'approvedTimeTo', 'daySchedules', 'allTechs'));
+        return view('service_orders.appointments.scheduled.view_scheduled', compact(
+            'display',
+            'pestTypes',
+            'serviceAreas',
+            'termiteAreas',
+            'appointmentImages',
+            'technicians',
+            'approvedDate',
+            'approvedTimeFrom',
+            'approvedTimeTo',
+            'daySchedules',
+            'allTechs'
+        ));
+    }
+
+    public function scheduled_appointments_view_update_technician(Request $request, $svc_id)
+    {
+        $request->validate([
+            'svcas_assigned_to' => 'required',
+        ]);
+
+        DB::table('service_appointment_schedules')
+            ->join('service_appointments', 'service_appointments.svca_id', '=', 'service_appointment_schedules.svca_id')
+            ->where('service_appointments.svc_id', $svc_id)
+            ->where('service_appointment_schedules.svcas_active', 1)
+            ->update([
+                'service_appointment_schedules.svcas_assigned_to' => $request->svcas_assigned_to,
+                'service_appointment_schedules.svcas_date_modified' => Carbon::now(),
+                'service_appointment_schedules.svcas_modified_by' => session('usr_id'),
+            ]);
+
+        $serviceOrder = 'SA-' . str_pad($svc_id, 6, '0', STR_PAD_LEFT);
+
+        logUserActivity('Manage Appointments', 'Changed Technician ' . $serviceOrder);
+
+        session()->flash('successMessage', 'Technician changed successfully.');
+        return redirect()->back();
     }
     // END SCHEDULED APPOINTMENTS
 
