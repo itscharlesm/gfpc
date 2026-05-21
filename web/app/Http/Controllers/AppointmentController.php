@@ -1263,142 +1263,143 @@ class AppointmentController extends Controller
     // END ASSESSED APPOINTMENTS
 
     // START SCHEDULED APPOINTMENTS
+
     public function scheduled_appointments(Request $request)
-{
-    $search        = $request->search ?? '';
-    $view          = $request->view ?? 'table';       // 'table' | 'timeline'
-    $sessionBranchId = session('branch_id');
- 
-    // ── Base query (shared by both views) ────────────────────────────────────
-    $query = DB::table('services')
-        ->leftJoin('users', 'services.usr_id', '=', 'users.usr_id')
-        ->leftJoin('branches', 'services.branch_id', '=', 'branches.branch_id')
-        ->leftJoin('service_appointments', 'service_appointments.svc_id', '=', 'services.svc_id')
-        ->leftJoin(
-            'service_appointment_schedules',
-            'service_appointment_schedules.svca_id',
-            '=',
-            'service_appointments.svca_id'
-        )
-        ->leftJoin(
-            'users as technicians',
-            'technicians.usr_id',
-            '=',
-            'service_appointment_schedules.svcas_assigned_to'
-        )
-        ->where('services.svc_active', 1)
-        ->where('services.svc_status', 'SCHEDULED');
- 
-    // Branch filter
-    if ($sessionBranchId != 1) {
-        $query->where('services.branch_id', $sessionBranchId);
-    }
- 
-    $query->select(
-        'services.svc_id',
-        'services.svc_sa_number',
-        'services.svc_is_termite',
-        'services.svc_is_package',
-        'services.svc_status',
-        'services.svc_payment_status',
-        'services.svc_date_created',
-        'users.usr_first_name',
-        'users.usr_last_name',
-        'users.usr_email',
-        'users.usr_mobile',
-        'branches.branch_name',
-        'service_appointments.svca_approved_date',
-        'service_appointments.svca_approved_time_from',
-        'service_appointments.svca_approved_time_to',
-        'technicians.usr_first_name as tech_first_name',
-        'technicians.usr_last_name  as tech_last_name'
-    );
- 
-    // Search filter (table view)
-    if (!empty($search)) {
-        $query->where(function ($q) use ($search) {
-            $q->where('users.usr_first_name', 'LIKE', "%$search%")
-              ->orWhere('users.usr_last_name',  'LIKE', "%$search%")
-              ->orWhere('users.usr_email',       'LIKE', "%$search%")
-              ->orWhere('users.usr_mobile',      'LIKE', "%$search%")
-              ->orWhere('branches.branch_name',  'LIKE', "%$search%");
-        });
-    }
- 
-    $query->orderBy('service_appointments.svca_approved_date', 'asc')
-          ->orderBy('service_appointments.svca_approved_time_from', 'asc');
- 
-    // ── TABLE view ───────────────────────────────────────────────────────────
-    if ($view === 'table') {
-        $appointments = $query->paginate(50)->appends($request->except('page'));
- 
+    {
+        $search = $request->search ?? '';
+
+        // ALWAYS TIMELINE VIEW
+        $view = 'timeline';
+
+        $sessionBranchId = session('branch_id');
+
+        // Base query
+        $query = DB::table('services')
+            ->leftJoin('users', 'services.usr_id', '=', 'users.usr_id')
+            ->leftJoin('branches', 'services.branch_id', '=', 'branches.branch_id')
+            ->leftJoin('service_appointments', 'service_appointments.svc_id', '=', 'services.svc_id')
+            ->leftJoin(
+                'service_appointment_schedules',
+                'service_appointment_schedules.svca_id',
+                '=',
+                'service_appointments.svca_id'
+            )
+            ->leftJoin(
+                'users as technicians',
+                'technicians.usr_id',
+                '=',
+                'service_appointment_schedules.svcas_assigned_to'
+            )
+            ->where('services.svc_active', 1)
+            ->where('services.svc_status', 'SCHEDULED');
+
+        // Branch filter
+        if ($sessionBranchId != 1) {
+            $query->where('services.branch_id', $sessionBranchId);
+        }
+
+        $query->select(
+            'services.svc_id',
+            'services.svc_sa_number',
+            'services.svc_is_termite',
+            'services.svc_is_package',
+            'services.svc_status',
+            'services.svc_payment_status',
+            'services.svc_date_created',
+
+            'users.usr_first_name',
+            'users.usr_last_name',
+            'users.usr_email',
+            'users.usr_mobile',
+
+            'branches.branch_name',
+
+            'service_appointments.svca_approved_date',
+            'service_appointments.svca_approved_time_from',
+            'service_appointments.svca_approved_time_to',
+
+            'technicians.usr_first_name as tech_first_name',
+            'technicians.usr_last_name  as tech_last_name'
+        );
+
+        // Search filter
+        if (!empty($search)) {
+            $query->where(function ($q) use ($search) {
+                $q->where('users.usr_first_name', 'LIKE', "%$search%")
+                    ->orWhere('users.usr_last_name', 'LIKE', "%$search%")
+                    ->orWhere('users.usr_email', 'LIKE', "%$search%")
+                    ->orWhere('users.usr_mobile', 'LIKE', "%$search%")
+                    ->orWhere('branches.branch_name', 'LIKE', "%$search%");
+            });
+        }
+
+        $query->orderBy('service_appointments.svca_approved_date', 'asc')
+            ->orderBy('service_appointments.svca_approved_time_from', 'asc');
+
+        // Get all available dates
+        $availableDates = (clone $query)
+            ->whereNotNull('service_appointments.svca_approved_date')
+            ->orderBy('service_appointments.svca_approved_date', 'asc')
+            ->pluck('service_appointments.svca_approved_date')
+            ->map(fn($d) => Carbon::parse($d)->toDateString())
+            ->unique()
+            ->values()
+            ->toArray();
+
+        // Default to OLDEST approved date
+        $defaultDate = !empty($availableDates)
+            ? $availableDates[0]
+            : now()->toDateString();
+
+        // Selected timeline date
+        $tlDate = $request->tl_date
+            ? Carbon::parse($request->tl_date)->toDateString()
+            : $defaultDate;
+
+        // Previous / Next Date
+        $dateIndex = array_search($tlDate, $availableDates);
+
+        $prevDate = ($dateIndex !== false && $dateIndex > 0)
+            ? $availableDates[$dateIndex - 1]
+            : null;
+
+        $nextDate = ($dateIndex !== false && $dateIndex < count($availableDates) - 1)
+            ? $availableDates[$dateIndex + 1]
+            : null;
+
+        // Timeline rows
+        $tlRows = (clone $query)
+            ->whereDate('service_appointments.svca_approved_date', $tlDate)
+            ->get();
+
+        // Group by technician
+        $timelineByTech = [];
+
+        foreach ($tlRows as $row) {
+
+            $techKey = $row->tech_last_name
+                ? trim($row->tech_last_name . ', ' . $row->tech_first_name)
+                : 'Unassigned';
+
+            $timelineByTech[$techKey][] = $row;
+        }
+
+        ksort($timelineByTech);
+
         return view(
             'service_orders.appointments.scheduled.scheduled',
-            compact('appointments', 'search', 'view')
+            compact(
+                'search',
+                'view',
+                'tlDate',
+                'tlRows',
+                'timelineByTech',
+                'availableDates',
+                'prevDate',
+                'nextDate'
+            )
         );
     }
- 
-    // ── TIMELINE view ────────────────────────────────────────────────────────
- 
-    // Collect every available date so the prev/next buttons know the boundaries.
-    $availableDates = (clone $query)
-        ->whereNotNull('service_appointments.svca_approved_date')
-        ->orderBy('service_appointments.svca_approved_date', 'asc')
-        ->pluck('service_appointments.svca_approved_date')
-        ->map(fn($d) => \Carbon\Carbon::parse($d)->toDateString())
-        ->unique()
-        ->values()
-        ->toArray();
- 
-    // Resolve the requested date (default: first available date, or today).
-    $defaultDate = !empty($availableDates)
-        ? $availableDates[0]
-        : now()->toDateString();
- 
-    $tlDate = $request->tl_date
-        ? \Carbon\Carbon::parse($request->tl_date)->toDateString()
-        : $defaultDate;
- 
-    // Previous / next date navigation.
-    $dateIndex = array_search($tlDate, $availableDates);
-    $prevDate  = ($dateIndex !== false && $dateIndex > 0)
-        ? $availableDates[$dateIndex - 1]
-        : null;
-    $nextDate  = ($dateIndex !== false && $dateIndex < count($availableDates) - 1)
-        ? $availableDates[$dateIndex + 1]
-        : null;
- 
-    // Fetch only the rows for the selected date.
-    $tlRows = (clone $query)
-        ->where('service_appointments.svca_approved_date', $tlDate)
-        ->get();
- 
-    // Group by technician for the timeline renderer.
-    // Structure: [ 'Last, First' => [ ...rows ] ]
-    $timelineByTech = [];
-    foreach ($tlRows as $row) {
-        $techKey = $row->tech_last_name
-            ? trim($row->tech_last_name . ', ' . $row->tech_first_name)
-            : 'Unassigned';
- 
-        $timelineByTech[$techKey][] = $row;
-    }
-    ksort($timelineByTech);
- 
-    return view(
-        'service_orders.appointments.scheduled.scheduled',
-        compact(
-            'search',
-            'view',
-            'tlDate',
-            'tlRows',
-            'timelineByTech',
-            'availableDates',
-            'prevDate',
-            'nextDate'
-        )
-    );
-}
 
     public function scheduled_appointments_view($svc_id)
     {

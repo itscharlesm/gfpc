@@ -1,6 +1,30 @@
 @extends('layouts.themes.main')
 
 @section('content')
+    {{-- ── Flatpickr CSS ────────────────────────────────────────────────────────── --}}
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
+    <style>
+        /* Override flatpickr to match Bootstrap/AdminLTE look */
+        .flatpickr-calendar {
+            font-size: 13px;
+            border-radius: 6px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
+        }
+
+        .flatpickr-day.disabled,
+        .flatpickr-day.disabled:hover {
+            color: #ccc !important;
+            background: transparent !important;
+            cursor: not-allowed !important;
+            text-decoration: line-through;
+        }
+
+        .flatpickr-day.selected,
+        .flatpickr-day.selected:hover {
+            background: #007bff !important;
+            border-color: #007bff !important;
+        }
+    </style>
 
     {{-- ── Content Header ──────────────────────────────────────────────────────── --}}
     <div class="content-header">
@@ -37,476 +61,368 @@
                         <i class="far fa-calendar-alt mr-1"></i>
                         Scheduled Appointments
                     </h3>
-
-                    <div class="btn-group btn-group-sm" role="group" aria-label="View toggle">
-                        <a href="{{ url('service/orders/appointments/scheduled') }}?view=table&search={{ $search }}"
-                            class="btn {{ $view === 'table' ? 'btn-primary' : 'btn-outline-primary' }}">
-                            <i class="fas fa-table mr-1"></i> Table
-                        </a>
-                        <a href="{{ url('service/orders/appointments/scheduled') }}?view=timeline"
-                            class="btn {{ $view === 'timeline' ? 'btn-primary' : 'btn-outline-primary' }}">
-                            <i class="fas fa-stream mr-1"></i> Timeline
-                        </a>
-                    </div>
                 </div>
 
                 <div class="card-body p-0">
 
-                    {{-- ════════════════════════════════════════════════════════════
-                     TABLE VIEW
-                ════════════════════════════════════════════════════════════ --}}
-                    @if ($view === 'table')
-                        {{-- Search bar --}}
-                        <div class="p-3 border-bottom">
-                            <form method="GET" action="{{ url('service/orders/appointments/scheduled') }}">
-                                <input type="hidden" name="view" value="table">
-                                <div class="input-group">
-                                    <input type="text" name="search" id="searchInput" class="form-control"
-                                        placeholder="Search client, branch, email, mobile…" value="{{ $search }}">
-                                    <div class="input-group-append">
-                                        <button type="submit" class="btn btn-primary">
-                                            <i class="fas fa-search"></i> Search
-                                        </button>
-                                    </div>
-                                </div>
+
+                    {{-- Day navigation bar --}}
+                    <div class="d-flex align-items-center justify-content-between flex-wrap p-3 border-bottom"
+                        style="gap:10px;">
+
+                        {{-- Previous day --}}
+                        @if ($prevDate)
+                            <a href="{{ url('service/orders/appointments/scheduled') }}?tl_date={{ $prevDate }}"
+                                class="btn btn-sm btn-outline-secondary">
+                                <i class="fas fa-chevron-left mr-1"></i> Previous day
+                            </a>
+                        @else
+                            <button class="btn btn-sm btn-outline-secondary" disabled>
+                                <i class="fas fa-chevron-left mr-1"></i> Previous day
+                            </button>
+                        @endif
+
+                        {{-- Date label + Flatpickr date picker --}}
+                        <div class="d-flex align-items-center" style="gap:10px; flex-wrap:wrap;">
+                            <span class="font-weight-bold" style="font-size:15px;">
+                                {{ \Carbon\Carbon::parse($tlDate)->format('l, F d, Y') }}
+                            </span>
+
+                            {{-- Flatpickr jump-to-date picker --}}
+                            <form method="GET" action="{{ url('service/orders/appointments/scheduled') }}" id="tlDateForm"
+                                class="d-flex align-items-center" style="gap:6px;">
+                                <input type="hidden" name="view" value="timeline">
+                                <input type="text" name="tl_date" id="tlDatePicker" value="{{ $tlDate }}"
+                                    class="form-control form-control-sm" style="width:150px;" placeholder="Pick a date"
+                                    readonly>
                             </form>
                         </div>
 
-                        {{-- Table --}}
-                        <div class="table-responsive">
-                            <table class="table table-hover table-bordered table-sm mb-0" id="apptTable">
-                                <thead class="thead-light">
-                                    <tr>
-                                        <th class="text-center">SA Number</th>
-                                        <th class="text-center">Client</th>
-                                        <th class="text-center">Mobile</th>
-                                        <th class="text-center">Branch</th>
-                                        <th class="text-center">Termite</th>
-                                        <th class="text-center">Package</th>
-                                        <th class="text-center">Payment</th>
-                                        <th class="text-center">Approved Date</th>
-                                        <th class="text-center">Time</th>
-                                        <th class="text-center">Assigned To</th>
-                                        <th class="text-center">Status</th>
-                                        <th class="text-center">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @forelse ($appointments as $appt)
-                                        <tr>
-                                            <td class="text-center align-middle">
-                                                SA-{{ str_pad($appt->svc_sa_number, 6, '0', STR_PAD_LEFT) }}
-                                            </td>
-                                            <td class="text-center align-middle">
-                                                {{ $appt->usr_last_name }}, {{ $appt->usr_first_name }}
-                                            </td>
-                                            <td class="text-center align-middle">
-                                                {{ $appt->usr_mobile }}
-                                            </td>
-                                            <td class="text-center align-middle">
-                                                {{ $appt->branch_name }}
-                                            </td>
-                                            <td class="text-center align-middle">
-                                                @if ($appt->svc_is_termite)
-                                                    <span class="badge badge-info">YES</span>
-                                                @else
-                                                    <span class="text-muted">NO</span>
-                                                @endif
-                                            </td>
-                                            <td class="text-center align-middle">
-                                                @if ($appt->svc_is_package)
-                                                    <span class="badge badge-secondary">YES</span>
-                                                @else
-                                                    <span class="text-muted">NO</span>
-                                                @endif
-                                            </td>
-                                            <td class="text-center align-middle">
-                                                @if ($appt->svc_payment_status === 'PAID')
-                                                    <span class="badge badge-success">PAID</span>
-                                                @else
-                                                    <span class="badge badge-danger">{{ $appt->svc_payment_status }}</span>
-                                                @endif
-                                            </td>
-                                            <td class="text-center align-middle">
-                                                {{ \Carbon\Carbon::parse($appt->svca_approved_date)->format('m/d/Y') }}
-                                            </td>
-                                            <td class="text-center align-middle" style="white-space:nowrap;">
-                                                {{ \Carbon\Carbon::parse($appt->svca_approved_time_from)->format('h:iA') }}
-                                                &ndash;
-                                                {{ \Carbon\Carbon::parse($appt->svca_approved_time_to)->format('h:iA') }}
-                                            </td>
-                                            <td class="text-center align-middle">
-                                                {{ $appt->tech_first_name ? $appt->tech_last_name . ', ' . $appt->tech_first_name : '—' }}
-                                            </td>
-                                            <td class="text-center align-middle">
-                                                <span class="badge badge-primary">{{ $appt->svc_status }}</span>
-                                            </td>
-                                            <td class="text-center align-middle">
-                                                <a class="btn btn-primary btn-sm"
-                                                    href="{{ url('service/orders/appointments/scheduled/' . $appt->svc_id) }}">
-                                                    <i class="fas fa-eye"></i>
-                                                </a>
-                                            </td>
-                                        </tr>
-                                    @empty
-                                        <tr>
-                                            <td colspan="12" class="text-center text-muted py-4">
-                                                No scheduled appointments found.
-                                            </td>
-                                        </tr>
-                                    @endforelse
-                                </tbody>
-                            </table>
-                        </div>
-
-                        {{-- Pagination --}}
-                        @if ($appointments->hasPages())
-                            <div class="d-flex justify-content-end p-3 border-top">
-                                {{ $appointments->links() }}
-                            </div>
+                        {{-- Next day --}}
+                        @if ($nextDate)
+                            <a href="{{ url('service/orders/appointments/scheduled') }}?tl_date={{ $nextDate }}"
+                                class="btn btn-sm btn-outline-secondary">
+                                Next day <i class="fas fa-chevron-right ml-1"></i>
+                            </a>
+                        @else
+                            <button class="btn btn-sm btn-outline-secondary" disabled>
+                                Next day <i class="fas fa-chevron-right ml-1"></i>
+                            </button>
                         @endif
+                    </div>
 
-                        {{-- ════════════════════════════════════════════════════════════
-                     TIMELINE VIEW
-                ════════════════════════════════════════════════════════════ --}}
-                    @else
-                        {{-- Day navigation bar --}}
-                        <div class="d-flex align-items-center justify-content-between flex-wrap p-3 border-bottom"
-                            style="gap:10px;">
+                    {{-- Legend --}}
+                    <div class="px-3 pt-2 pb-1 d-flex flex-wrap" style="gap:16px; font-size:12px; color:#666;">
+                        <span class="d-flex align-items-center" style="gap:5px;">
+                            <span
+                                style="width:12px;height:12px;border-radius:3px;background:#B5D4F4;border:0.5px solid #85B7EB;display:inline-block;"></span>
+                            Appointment slot
+                        </span>
+                        <span class="d-flex align-items-center" style="gap:5px;">
+                            <span
+                                style="width:12px;height:12px;border-radius:3px;background:#C0DD97;border:0.5px solid #97C459;display:inline-block;"></span>
+                            Paid
+                        </span>
+                        <span class="d-flex align-items-center" style="gap:5px;">
+                            <span
+                                style="width:12px;height:12px;border-radius:3px;background:#FAC775;border:0.5px solid #EF9F27;display:inline-block;"></span>
+                            Unpaid
+                        </span>
+                    </div>
 
-                            {{-- Previous day --}}
-                            @if ($prevDate)
-                                <a href="{{ url('service/orders/appointments/scheduled') }}?view=timeline&tl_date={{ $prevDate }}"
-                                    class="btn btn-sm btn-outline-secondary">
-                                    <i class="fas fa-chevron-left mr-1"></i> Previous day
-                                </a>
-                            @else
-                                <button class="btn btn-sm btn-outline-secondary" disabled>
-                                    <i class="fas fa-chevron-left mr-1"></i> Previous day
-                                </button>
-                            @endif
+                    {{-- Timeline container --}}
+                    <div class="p-3" style="overflow-x:auto;" id="tlOuter">
+                        @if (empty($timelineByTech))
+                            <p class="text-muted text-center py-4">No appointments scheduled for this day.</p>
+                        @else
+                            <div id="tlContainer" style="min-width:900px;"></div>
+                        @endif
+                    </div>
 
-                            {{-- Date label + date picker --}}
-                            <div class="d-flex align-items-center" style="gap:10px; flex-wrap:wrap;">
-                                <span class="font-weight-bold" style="font-size:15px;">
-                                    {{ \Carbon\Carbon::parse($tlDate)->format('l, F d, Y') }}
-                                </span>
-
-                                {{-- Jump-to-date picker --}}
-                                <form method="GET" action="{{ url('service/orders/appointments/scheduled') }}"
-                                    class="d-flex align-items-center" style="gap:6px;">
-                                    <input type="hidden" name="view" value="timeline">
-                                    <input type="date" name="tl_date" value="{{ $tlDate }}"
-                                        class="form-control form-control-sm" style="width:150px;"
-                                        onchange="this.form.submit()">
-                                </form>
-                            </div>
-
-                            {{-- Next day --}}
-                            @if ($nextDate)
-                                <a href="{{ url('service/orders/appointments/scheduled') }}?view=timeline&tl_date={{ $nextDate }}"
-                                    class="btn btn-sm btn-outline-secondary">
-                                    Next day <i class="fas fa-chevron-right ml-1"></i>
-                                </a>
-                            @else
-                                <button class="btn btn-sm btn-outline-secondary" disabled>
-                                    Next day <i class="fas fa-chevron-right ml-1"></i>
-                                </button>
-                            @endif
-                        </div>
-
-                        {{-- Legend --}}
-                        <div class="px-3 pt-2 pb-1 d-flex flex-wrap" style="gap:16px; font-size:12px; color:#666;">
-                            <span class="d-flex align-items-center" style="gap:5px;">
-                                <span
-                                    style="width:12px;height:12px;border-radius:3px;background:#B5D4F4;border:0.5px solid #85B7EB;display:inline-block;"></span>
-                                Appointment slot
-                            </span>
-                            <span class="d-flex align-items-center" style="gap:5px;">
-                                <span
-                                    style="width:12px;height:12px;border-radius:3px;background:#C0DD97;border:0.5px solid #97C459;display:inline-block;"></span>
-                                Paid
-                            </span>
-                            <span class="d-flex align-items-center" style="gap:5px;">
-                                <span
-                                    style="width:12px;height:12px;border-radius:3px;background:#FAC775;border:0.5px solid #EF9F27;display:inline-block;"></span>
-                                Unpaid
-                            </span>
-                        </div>
-
-                        {{-- Timeline container --}}
-                        <div class="p-3" style="overflow-x:auto;" id="tlOuter">
-                            @if (empty($timelineByTech))
-                                <p class="text-muted text-center py-4">No appointments scheduled for this day.</p>
-                            @else
-                                <div id="tlContainer" style="min-width:900px;"></div>
-                            @endif
-                        </div>
-
-                        {{-- Pass PHP data to JS --}}
-                        @php
-                            $tlDataForJs = [];
-                            foreach ($timelineByTech as $techName => $rows) {
-                                foreach ($rows as $row) {
-                                    $tlDataForJs[] = [
-                                        'tech' => $techName,
-                                        'client' => $row->usr_last_name . ', ' . $row->usr_first_name,
-                                        'email' => $row->usr_email,
-                                        'mobile' => $row->usr_mobile,
-                                        'branch' => $row->branch_name,
-                                        'from' => $row->svca_approved_time_from,
-                                        'to' => $row->svca_approved_time_to,
-                                        'payment' => $row->svc_payment_status,
-                                        'termite' => (bool) $row->svc_is_termite,
-                                        'package' => (bool) $row->svc_is_package,
-                                        'sa_number' => 'SA-' . str_pad($row->svc_sa_number, 6, '0', STR_PAD_LEFT),
-                                        'svc_id' => $row->svc_id,
-                                    ];
-                                }
+                    {{-- Pass PHP data to JS --}}
+                    @php
+                        $tlDataForJs = [];
+                        foreach ($timelineByTech as $techName => $rows) {
+                            foreach ($rows as $row) {
+                                $tlDataForJs[] = [
+                                    'tech' => $techName,
+                                    'client' => $row->usr_last_name . ', ' . $row->usr_first_name,
+                                    'email' => $row->usr_email,
+                                    'mobile' => $row->usr_mobile,
+                                    'branch' => $row->branch_name,
+                                    'from' => $row->svca_approved_time_from,
+                                    'to' => $row->svca_approved_time_to,
+                                    'payment' => $row->svc_payment_status,
+                                    'termite' => (bool) $row->svc_is_termite,
+                                    'package' => (bool) $row->svc_is_package,
+                                    'sa_number' => 'SA-' . str_pad($row->svc_sa_number, 6, '0', STR_PAD_LEFT),
+                                    'svc_id' => $row->svc_id,
+                                ];
                             }
-                        @endphp
+                        }
+                    @endphp
 
-                        <script>
-                            (function() {
+                    {{-- Flatpickr JS --}}
+                    <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
+                    <script>
+                        (function() {
+                            const availableDates = @json($availableDates);
 
-                                /* ── Config ──────────────────────────────────────── */
-                                const HOURS_S = 0; // timeline start hour (12am)
-                                const HOURS_E = 23; // timeline end hour (11pm)
-                                const TOTAL = HOURS_E - HOURS_S;
-                                const ROW_H = 40; // px height per tech row
-                                const LABEL_W = 130; // px width of tech label column
-                                const BASE_URL = '{{ url('service/orders/appointments/scheduled') }}';
-
-                                const DATA = @json($tlDataForJs);
-
-                                /* ── Helpers ─────────────────────────────────────── */
-                                function parseTm(s) {
-                                    if (!s) return null;
-                                    const p = s.split(':');
-                                    return +p[0] + +p[1] / 60;
-                                }
-
-                                function pct(h) {
-                                    return ((h - HOURS_S) / TOTAL * 100).toFixed(4) + '%';
-                                }
-
-                                function fmt12(s) {
-                                    if (!s) return '';
-                                    const h = parseInt(s);
-                                    const m = s.split(':')[1] ?? '00';
-                                    const ampm = h < 12 ? 'AM' : 'PM';
-                                    const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
-                                    return h12 + (m !== '00' ? ':' + m : '') + ' ' + ampm;
-                                }
-
-                                /* ── Tooltip ─────────────────────────────────────── */
-                                let tt = null;
-
-                                function ensureTT() {
-                                    if (tt) return;
-                                    tt = document.createElement('div');
-                                    tt.style.cssText = [
-                                        'position:fixed;background:#fff;border:1px solid #ddd;',
-                                        'border-radius:8px;padding:8px 12px;font-size:12px;',
-                                        'pointer-events:none;z-index:9999;display:none;',
-                                        'box-shadow:0 4px 12px rgba(0,0,0,.1);',
-                                        'max-width:240px;line-height:1.6;color:#333;'
-                                    ].join('');
-                                    document.body.appendChild(tt);
-                                }
-
-                                function showTip(e, html) {
-                                    ensureTT();
-                                    tt.innerHTML = html;
-                                    tt.style.display = 'block';
-                                    moveTip(e);
-                                }
-
-                                function moveTip(e) {
-                                    if (!tt) return;
-                                    const offX = 14,
-                                        offY = 14;
-                                    let x = e.clientX + offX;
-                                    let y = e.clientY + offY;
-                                    // keep inside viewport
-                                    if (x + 240 > window.innerWidth) x = e.clientX - 240 - offX;
-                                    if (y + 160 > window.innerHeight) y = e.clientY - 160 - offY;
-                                    tt.style.left = x + 'px';
-                                    tt.style.top = y + 'px';
-                                }
-
-                                function hideTip() {
-                                    if (tt) tt.style.display = 'none';
-                                }
-
-                                /* ── Build block ─────────────────────────────────── */
-                                function makeBlock(row) {
-                                    const frm = parseTm(row.from);
-                                    const to_ = parseTm(row.to);
-                                    if (frm === null || to_ === null) return null;
-
-                                    const df = Math.max(frm, HOURS_S);
-                                    const dt = Math.min(to_, HOURS_E);
-                                    if (df >= dt) return null;
-
-                                    // Color by payment status
-                                    let bg, color, border;
-                                    if (row.payment === 'PAID') {
-                                        bg = '#C0DD97';
-                                        color = '#27500A';
-                                        border = '#97C459';
-                                    } else {
-                                        bg = '#FAC775';
-                                        color = '#633806';
-                                        border = '#EF9F27';
-                                    }
-
-                                    const blk = document.createElement('div');
-                                    blk.style.cssText = [
-                                        'position:absolute;top:4px;bottom:4px;',
-                                        'left:' + pct(df) + ';',
-                                        'width:' + ((dt - df) / TOTAL * 100).toFixed(4) + '%;',
-                                        'background:' + bg + ';color:' + color + ';',
-                                        'border:0.5px solid ' + border + ';',
-                                        'border-radius:5px;',
-                                        'display:flex;flex-direction:column;',
-                                        'align-items:center;justify-content:center;',
-                                        'overflow:hidden;padding:0 4px;cursor:pointer;',
-                                    ].join('');
-
-                                    const nameEl = document.createElement('span');
-                                    nameEl.style.cssText =
-                                        'font-size:10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;';
-                                    nameEl.textContent = row.client;
-
-                                    const techEl = document.createElement('span');
-                                    techEl.style.cssText =
-                                        'font-size:9px;opacity:0.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;';
-                                    techEl.textContent = row.tech;
-
-                                    blk.appendChild(nameEl);
-                                    blk.appendChild(techEl);
-
-                                    // Tooltip HTML
-                                    const tipHtml = [
-                                        '<strong>' + row.sa_number + ' &mdash; ' + row.client + '</strong>',
-                                        '<hr style="margin:4px 0;border-color:#eee;">',
-                                        '<span style="color:#666;">Tech:</span> ' + row.tech,
-                                        '<span style="color:#666;">Branch:</span> ' + row.branch,
-                                        '<span style="color:#666;">Mobile:</span> ' + (row.mobile || '—'),
-                                        '<span style="color:#666;">Email:</span> ' + (row.email || '—'),
-                                        '<span style="color:#666;">Time:</span> ' + fmt12(row.from) + ' – ' + fmt12(row.to),
-                                        '<span style="color:#666;">Payment:</span> ' + row.payment,
-                                        '<span style="color:#666;">Termite:</span> ' + (row.termite ? 'Yes' : 'No') +
-                                        '&nbsp;&nbsp;<span style="color:#666;">Package:</span> ' + (row.package ? 'Yes' : 'No'),
-                                    ].join('<br>');
-
-                                    blk.addEventListener('mouseenter', e => showTip(e, tipHtml));
-                                    blk.addEventListener('mousemove', moveTip);
-                                    blk.addEventListener('mouseleave', hideTip);
-                                    blk.addEventListener('click', () => {
-                                        hideTip();
-                                        window.location.href = BASE_URL + '/' + row.svc_id;
-                                    });
-
-                                    return blk;
-                                }
-
-                                /* ── Build timeline ──────────────────────────────── */
-                                function buildTimeline() {
-                                    const container = document.getElementById('tlContainer');
-                                    if (!container || !DATA.length) return;
-                                    container.innerHTML = '';
-
-                                    // Collect unique technicians in order
-                                    const techs = [...new Set(DATA.map(r => r.tech))].sort();
-
-                                    /* Hour axis */
-                                    const axisRow = document.createElement('div');
-                                    axisRow.style.cssText = 'display:flex;margin-bottom:6px;';
-
-                                    const axisLabel = document.createElement('div');
-                                    axisLabel.style.cssText = `flex:none;width:${LABEL_W}px;`;
-                                    axisRow.appendChild(axisLabel);
-
-                                    const axisTrack = document.createElement('div');
-                                    axisTrack.style.cssText = 'flex:1;position:relative;height:20px;';
-
-                                    for (let h = HOURS_S; h <= HOURS_E; h++) {
-                                        const span = document.createElement('span');
-                                        span.style.cssText = [
-                                            'position:absolute;',
-                                            'left:' + pct(h) + ';',
-                                            'transform:translateX(-50%);',
-                                            'font-size:10px;color:#999;white-space:nowrap;',
-                                        ].join('');
-                                        const h12 = h === 0 || h === 24 ? 12 : h > 12 ? h - 12 : h;
-                                        const ampm = h < 12 ? 'am' : 'pm';
-                                        span.textContent = h12 + ampm;
-                                        axisTrack.appendChild(span);
-                                    }
-
-                                    axisRow.appendChild(axisTrack);
-                                    container.appendChild(axisRow);
-
-                                    /* One row per technician */
-                                    techs.forEach(tech => {
-                                        const rows = DATA.filter(r => r.tech === tech);
-
-                                        const rowWrap = document.createElement('div');
-                                        rowWrap.style.cssText = 'display:flex;align-items:center;margin-bottom:4px;';
-
-                                        /* Label */
-                                        const label = document.createElement('div');
-                                        label.style.cssText = [
-                                            `flex:none;width:${LABEL_W}px;`,
-                                            'font-size:11px;color:#555;padding-right:8px;',
-                                            'text-align:right;overflow:hidden;',
-                                            'text-overflow:ellipsis;white-space:nowrap;',
-                                        ].join('');
-                                        label.title = tech;
-                                        label.textContent = tech;
-                                        rowWrap.appendChild(label);
-
-                                        /* Track */
-                                        const track = document.createElement('div');
-                                        track.style.cssText = [
-                                            'flex:1;position:relative;',
-                                            `height:${ROW_H}px;`,
-                                            'background:#f7f7f7;',
-                                            'border:0.5px solid #ddd;',
-                                            'border-radius:6px;overflow:visible;',
-                                        ].join('');
-
-                                        /* Hour grid lines */
-                                        for (let h = HOURS_S; h <= HOURS_E; h++) {
-                                            const line = document.createElement('div');
-                                            line.style.cssText = [
-                                                'position:absolute;top:0;bottom:0;',
-                                                'left:' + pct(h) + ';',
-                                                'width:0.5px;background:#e0e0e0;',
-                                            ].join('');
-                                            track.appendChild(line);
+                            document.addEventListener('DOMContentLoaded', function() {
+                                flatpickr('#tlDatePicker', {
+                                    enable: availableDates, // only these dates are clickable; all others greyed out
+                                    dateFormat: 'Y-m-d',
+                                    defaultDate: '{{ $tlDate }}',
+                                    disableMobile: true, // use flatpickr on mobile too, not native picker
+                                    onChange: function(selectedDates, dateStr) {
+                                        if (dateStr) {
+                                            document.getElementById('tlDateForm').submit();
                                         }
+                                    }
+                                });
+                            });
+                        })();
+                    </script>
 
-                                        /* Blocks */
-                                        rows.forEach(row => {
-                                            const blk = makeBlock(row);
-                                            if (blk) track.appendChild(blk);
-                                        });
+                    <script>
+                        (function() {
 
-                                        rowWrap.appendChild(track);
-                                        container.appendChild(rowWrap);
-                                    });
+                            /* ── Config ──────────────────────────────────────── */
+                            const HOURS_S = 0; // timeline start hour (12am)
+                            const HOURS_E = 23; // timeline end hour  (11pm)
+                            const TOTAL = HOURS_E - HOURS_S;
+                            const ROW_H = 40; // px height per tech row
+                            const LABEL_W = 130; // px width of tech label column
+                            const BASE_URL = '{{ url('service/orders/appointments/scheduled') }}';
+
+                            const DATA = @json($tlDataForJs);
+
+                            /* ── Helpers ─────────────────────────────────────── */
+                            function parseTm(s) {
+                                if (!s) return null;
+                                const p = s.split(':');
+                                return +p[0] + +p[1] / 60;
+                            }
+
+                            function pct(h) {
+                                return ((h - HOURS_S) / TOTAL * 100).toFixed(4) + '%';
+                            }
+
+                            function fmt12(s) {
+                                if (!s) return '';
+                                const h = parseInt(s);
+                                const m = s.split(':')[1] ?? '00';
+                                const ampm = h < 12 ? 'AM' : 'PM';
+                                const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+                                return h12 + (m !== '00' ? ':' + m : '') + ' ' + ampm;
+                            }
+
+                            /* ── Tooltip ─────────────────────────────────────── */
+                            let tt = null;
+
+                            function ensureTT() {
+                                if (tt) return;
+                                tt = document.createElement('div');
+                                tt.style.cssText = [
+                                    'position:fixed;background:#fff;border:1px solid #ddd;',
+                                    'border-radius:8px;padding:8px 12px;font-size:12px;',
+                                    'pointer-events:none;z-index:9999;display:none;',
+                                    'box-shadow:0 4px 12px rgba(0,0,0,.1);',
+                                    'max-width:240px;line-height:1.6;color:#333;'
+                                ].join('');
+                                document.body.appendChild(tt);
+                            }
+
+                            function showTip(e, html) {
+                                ensureTT();
+                                tt.innerHTML = html;
+                                tt.style.display = 'block';
+                                moveTip(e);
+                            }
+
+                            function moveTip(e) {
+                                if (!tt) return;
+                                const offX = 14,
+                                    offY = 14;
+                                let x = e.clientX + offX;
+                                let y = e.clientY + offY;
+                                if (x + 240 > window.innerWidth) x = e.clientX - 240 - offX;
+                                if (y + 160 > window.innerHeight) y = e.clientY - 160 - offY;
+                                tt.style.left = x + 'px';
+                                tt.style.top = y + 'px';
+                            }
+
+                            function hideTip() {
+                                if (tt) tt.style.display = 'none';
+                            }
+
+                            /* ── Build block ─────────────────────────────────── */
+                            function makeBlock(row) {
+                                const frm = parseTm(row.from);
+                                const to_ = parseTm(row.to);
+                                if (frm === null || to_ === null) return null;
+
+                                const df = Math.max(frm, HOURS_S);
+                                const dt = Math.min(to_, HOURS_E);
+                                if (df >= dt) return null;
+
+                                // Color by payment status
+                                let bg, color, border;
+                                if (row.payment === 'PAID') {
+                                    bg = '#C0DD97';
+                                    color = '#27500A';
+                                    border = '#97C459';
+                                } else {
+                                    bg = '#FAC775';
+                                    color = '#633806';
+                                    border = '#EF9F27';
                                 }
 
-                                document.addEventListener('DOMContentLoaded', buildTimeline);
-                                // fallback if DOM already ready
-                                if (document.readyState !== 'loading') buildTimeline();
+                                const blk = document.createElement('div');
+                                blk.style.cssText = [
+                                    'position:absolute;top:4px;bottom:4px;',
+                                    'left:' + pct(df) + ';',
+                                    'width:' + ((dt - df) / TOTAL * 100).toFixed(4) + '%;',
+                                    'background:' + bg + ';color:' + color + ';',
+                                    'border:0.5px solid ' + border + ';',
+                                    'border-radius:5px;',
+                                    'display:flex;flex-direction:column;',
+                                    'align-items:center;justify-content:center;',
+                                    'overflow:hidden;padding:0 4px;cursor:pointer;',
+                                ].join('');
 
-                            })();
-                        </script>
-                    @endif
+                                const nameEl = document.createElement('span');
+                                nameEl.style.cssText =
+                                    'font-size:10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;';
+                                nameEl.textContent = row.client;
+
+                                const techEl = document.createElement('span');
+                                techEl.style.cssText =
+                                    'font-size:9px;opacity:0.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;';
+                                techEl.textContent = row.tech;
+
+                                blk.appendChild(nameEl);
+                                blk.appendChild(techEl);
+
+                                // Tooltip HTML
+                                const tipHtml = [
+                                    '<strong>' + row.sa_number + ' &mdash; ' + row.client + '</strong>',
+                                    '<hr style="margin:4px 0;border-color:#eee;">',
+                                    '<span style="color:#666;">Tech:</span> ' + row.tech,
+                                    '<span style="color:#666;">Branch:</span> ' + row.branch,
+                                    '<span style="color:#666;">Mobile:</span> ' + (row.mobile || '—'),
+                                    '<span style="color:#666;">Email:</span> ' + (row.email || '—'),
+                                    '<span style="color:#666;">Time:</span> ' + fmt12(row.from) + ' – ' + fmt12(row.to),
+                                    '<span style="color:#666;">Payment:</span> ' + row.payment,
+                                    '<span style="color:#666;">Termite:</span> ' + (row.termite ? 'Yes' : 'No') +
+                                    '&nbsp;&nbsp;<span style="color:#666;">Package:</span> ' + (row.package ? 'Yes' : 'No'),
+                                ].join('<br>');
+
+                                blk.addEventListener('mouseenter', e => showTip(e, tipHtml));
+                                blk.addEventListener('mousemove', moveTip);
+                                blk.addEventListener('mouseleave', hideTip);
+                                blk.addEventListener('click', () => {
+                                    hideTip();
+                                    window.location.href = BASE_URL + '/' + row.svc_id;
+                                });
+
+                                return blk;
+                            }
+
+                            /* ── Build timeline ──────────────────────────────── */
+                            function buildTimeline() {
+                                const container = document.getElementById('tlContainer');
+                                if (!container || !DATA.length) return;
+                                container.innerHTML = '';
+
+                                // Collect unique technicians in order
+                                const techs = [...new Set(DATA.map(r => r.tech))].sort();
+
+                                /* Hour axis */
+                                const axisRow = document.createElement('div');
+                                axisRow.style.cssText = 'display:flex;margin-bottom:6px;';
+
+                                const axisLabel = document.createElement('div');
+                                axisLabel.style.cssText = `flex:none;width:${LABEL_W}px;`;
+                                axisRow.appendChild(axisLabel);
+
+                                const axisTrack = document.createElement('div');
+                                axisTrack.style.cssText = 'flex:1;position:relative;height:20px;';
+
+                                for (let h = HOURS_S; h <= HOURS_E; h++) {
+                                    const span = document.createElement('span');
+                                    span.style.cssText = [
+                                        'position:absolute;',
+                                        'left:' + pct(h) + ';',
+                                        'transform:translateX(-50%);',
+                                        'font-size:10px;color:#999;white-space:nowrap;',
+                                    ].join('');
+                                    const h12 = h === 0 || h === 24 ? 12 : h > 12 ? h - 12 : h;
+                                    const ampm = h < 12 ? 'am' : 'pm';
+                                    span.textContent = h12 + ampm;
+                                    axisTrack.appendChild(span);
+                                }
+
+                                axisRow.appendChild(axisTrack);
+                                container.appendChild(axisRow);
+
+                                /* One row per technician */
+                                techs.forEach(tech => {
+                                    const rows = DATA.filter(r => r.tech === tech);
+
+                                    const rowWrap = document.createElement('div');
+                                    rowWrap.style.cssText = 'display:flex;align-items:center;margin-bottom:4px;';
+
+                                    /* Label */
+                                    const label = document.createElement('div');
+                                    label.style.cssText = [
+                                        `flex:none;width:${LABEL_W}px;`,
+                                        'font-size:11px;color:#555;padding-right:8px;',
+                                        'text-align:right;overflow:hidden;',
+                                        'text-overflow:ellipsis;white-space:nowrap;',
+                                    ].join('');
+                                    label.title = tech;
+                                    label.textContent = tech;
+                                    rowWrap.appendChild(label);
+
+                                    /* Track */
+                                    const track = document.createElement('div');
+                                    track.style.cssText = [
+                                        'flex:1;position:relative;',
+                                        `height:${ROW_H}px;`,
+                                        'background:#f7f7f7;',
+                                        'border:0.5px solid #ddd;',
+                                        'border-radius:6px;overflow:visible;',
+                                    ].join('');
+
+                                    /* Hour grid lines */
+                                    for (let h = HOURS_S; h <= HOURS_E; h++) {
+                                        const line = document.createElement('div');
+                                        line.style.cssText = [
+                                            'position:absolute;top:0;bottom:0;',
+                                            'left:' + pct(h) + ';',
+                                            'width:0.5px;background:#e0e0e0;',
+                                        ].join('');
+                                        track.appendChild(line);
+                                    }
+
+                                    /* Blocks */
+                                    rows.forEach(row => {
+                                        const blk = makeBlock(row);
+                                        if (blk) track.appendChild(blk);
+                                    });
+
+                                    rowWrap.appendChild(track);
+                                    container.appendChild(rowWrap);
+                                });
+                            }
+
+                            document.addEventListener('DOMContentLoaded', buildTimeline);
+                            // fallback if DOM already ready
+                            if (document.readyState !== 'loading') buildTimeline();
+
+                        })();
+                    </script>
                     {{-- end view toggle --}}
 
                 </div>
@@ -518,5 +434,4 @@
         {{-- /.container-fluid --}}
 
     </section>
-
 @endsection
