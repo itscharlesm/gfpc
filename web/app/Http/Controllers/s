@@ -1,225 +1,443 @@
-<script>
-        (function() {
-            const HOURS_START = 0;
-            const HOURS_END = 24;
-            const TOTAL_HRS = HOURS_END - HOURS_START;
-            const ROW_HEIGHT = 36;
+The one I want to timeline:
+public function scheduled_appointments(Request $request)
+    {
+        $search = $request->search ?? '';
+        $sessionBranchId = session('branch_id');
 
-            const NEW_FROM_STR = "{{ $approvedTimeFrom }}";
-            const NEW_TO_STR = "{{ $approvedTimeTo }}";
-            const DAY_SCHEDULES = @json($daySchedules);
+        $query = DB::table('services')
+            ->leftJoin('users', 'services.usr_id', '=', 'users.usr_id')
+            ->leftJoin('branches', 'services.branch_id', '=', 'branches.branch_id')
+            ->leftJoin('service_appointments', 'service_appointments.svc_id', '=', 'services.svc_id')
+            ->leftJoin(
+                'service_appointment_schedules',
+                'service_appointment_schedules.svca_id',
+                '=',
+                'service_appointments.svca_id'
+            )
+            ->leftJoin(
+                'users as technicians',
+                'technicians.usr_id',
+                '=',
+                'service_appointment_schedules.svcas_assigned_to'
+            )
+            ->where('services.svc_active', 1)
+            ->where('services.svc_status', 'SCHEDULED');
 
-            // ── FIX 1 & 2: current assigned technician ID ──
-            const CURRENT_TECH_ID = "{{ $display->current_technician_id }}";
+        // Branch filter
+        if ($sessionBranchId != 1) {
+            $query->where('services.branch_id', $sessionBranchId);
+        }
 
-            function parseTime(str) {
-                if (!str) return null;
-                const parts = str.split(':');
-                return parseInt(parts[0]) + parseInt(parts[1]) / 60;
-            }
+        $query->select(
+            'services.svc_id',
+            'services.svc_sa_number',
+            'services.svc_is_termite',
+            'services.svc_is_package',
+            'services.svc_status',
+            'services.svc_payment_status',
+            'services.svc_date_created',
+            'users.usr_first_name',
+            'users.usr_last_name',
+            'users.usr_email',
+            'users.usr_mobile',
+            'branches.branch_name',
+            'service_appointments.svca_approved_date',
+            'service_appointments.svca_approved_time_from',
+            'service_appointments.svca_approved_time_to',
+            'technicians.usr_first_name as tech_first_name',
+            'technicians.usr_last_name as tech_last_name'
+        );
 
-            const NEW_FROM = parseTime(NEW_FROM_STR);
-            const NEW_TO = parseTime(NEW_TO_STR);
-
-            function pct(h) {
-                return ((h - HOURS_START) / TOTAL_HRS * 100).toFixed(4) + '%';
-            }
-
-            // ── FIX 1: show timeline immediately when modal opens if a tech is pre-selected ──
-            $('#changeTechnicianModal').on('shown.bs.modal', function() {
-                const select = document.getElementById('technicianSelect');
-                if (!select) return;
-
-                // Find the selected option that is NOT disabled
-                const selected = Array.from(select.options).find(o => o.selected && !o.disabled);
-                if (selected && selected.value) {
-                    document.getElementById('techTimelineWrap').style.display = 'block';
-                    document.getElementById('noTechSelected').style.display = 'none';
-                    renderTimeline(selected.value);
-                }
+        // Search
+        if (!empty($search)) {
+            $query->where(function ($q) use ($search) {
+                $q->where('users.usr_first_name', 'LIKE', "%$search%")
+                    ->orWhere('users.usr_last_name', 'LIKE', "%$search%")
+                    ->orWhere('users.usr_email', 'LIKE', "%$search%")
+                    ->orWhere('users.usr_mobile', 'LIKE', "%$search%")
+                    ->orWhere('branches.branch_name', 'LIKE', "%$search%");
             });
+        }
 
-            document.getElementById('technicianSelect').addEventListener('change', function() {
-                const techId = this.value;
-                const wrap = document.getElementById('techTimelineWrap');
-                const noTechMsg = document.getElementById('noTechSelected');
+        $query->orderBy('services.svc_date_created', 'asc');
 
-                if (!techId) {
-                    wrap.style.display = 'none';
-                    noTechMsg.style.display = 'block';
-                    return;
-                }
+        $appointments = $query->paginate(50);
 
-                wrap.style.display = 'block';
-                noTechMsg.style.display = 'none';
-                renderTimeline(techId);
-            });
+        return view('service_orders.appointments.scheduled.scheduled', compact('appointments', 'search'));
+    }
 
-            function renderTimeline(techId) {
-                const container = document.getElementById('techTimeline');
-                container.innerHTML = '';
+@extends('layouts.themes.main')
 
-                // Hour axis
-                const axis = document.createElement('div');
-                axis.style.cssText = `display:flex; margin-left:0; position:relative; height:20px; margin-bottom:4px;`;
-                for (let h = HOURS_START; h <= HOURS_END; h++) {
-                    const span = document.createElement('span');
-                    const leftPct = ((h - HOURS_START) / TOTAL_HRS * 100).toFixed(4) + '%';
-                    span.style.cssText =
-                        `position:absolute; left:${leftPct}; transform:translateX(-50%); font-size:10px; color:#999; white-space:nowrap;`;
-                    const h12 = h === 0 || h === 24 ? 12 : h > 12 ? h - 12 : h;
-                    const ampm = h < 12 || h === 0 ? 'am' : 'pm';
-                    span.textContent = h12 + ampm;
-                    axis.appendChild(span);
-                }
-                container.appendChild(axis);
+@section('content')
+    {{-- Content Header --}}
+    <div class="content-header">
+        <div class="container-fluid">
+            <div class="row mb-2">
+                <div class="col-sm-6">
+                    <h1 class="m-0">Scheduled Appointments</h1>
+                </div>
+                <div class="col-sm-6">
+                    <ol class="breadcrumb float-sm-right">
+                        <li class="breadcrumb-item">
+                            <a href="{{ action('App\Http\Controllers\AdminController@home') }}">Home</a>
+                        </li>
+                        <li class="breadcrumb-item">Appointments</li>
+                        <li class="breadcrumb-item active">Scheduled</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
 
-                const rowWrap = document.createElement('div');
-                rowWrap.style.cssText = `display:flex; align-items:center; margin-bottom:2px;`;
+    {{-- Main Content --}}
+    <section class="content">
+        @include('layouts.partials.onclick')
+        @include('layouts.partials.alerts')
+        @include('layouts.partials.modal_style')
+        <div class="container-fluid">
+            <div class="card">
+                <div class="card-body overflow-auto">
+                    <div class="row">
+                        <!-- Table Column -->
+                        <div class="col-lg-12 col-md-7">
+                            <form method="GET" action="{{ url('service/orders/appointments/scheduled') }}" class="mb-3">
+                                <div class="input-group">
+                                    <input type="text" name="search" id="searchInput" class="form-control"
+                                        placeholder="Search client..." value="{{ request('search') }}">
+                                    <div class="input-group-append">
+                                        <button type="submit" class="btn btn-primary">
+                                            <span class="fa fa-search"></span> Search
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
 
-                const track = document.createElement('div');
-                track.style.cssText =
-                    `flex:1; position:relative; height:${ROW_HEIGHT}px; background:#f7f7f7; border:0.5px solid #ddd; border-radius:6px; overflow:visible;`;
+                            <table id="profilingTable" class="table table-hover table-bordered table-sm responsive">
+                                <thead>
+                                    <tr>
+                                        <th class="text-center">SA Number</th>
+                                        <th class="text-center">Client</th>
+                                        <th class="text-center">Mobile Number</th>
+                                        <th class="text-center">Branch</th>
+                                        <th class="text-center">Is Termite</th>
+                                        <th class="text-center">Is Package</th>
+                                        <th class="text-center">Payment Status</th>
+                                        <th class="text-center">Approved Date</th>
+                                        <th class="text-center">Approved Time</th>
+                                        <th class="text-center">Assigned To</th>
+                                        <th class="text-center">Status</th>
+                                        <th class="text-center">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach ($appointments as $appointment)
+                                        <tr>
+                                            <td style="vertical-align: middle; text-align: center">
+                                                SA-{{ str_pad($appointment->svc_sa_number, 6, '0', STR_PAD_LEFT) }}
+                                            </td>
+                                            <td style="vertical-align: middle; text-align: center">
+                                                {{ $appointment->usr_last_name }}, {{ $appointment->usr_first_name }}
+                                            </td>
+                                            <td style="vertical-align: middle; text-align: center">
+                                                {{ $appointment->usr_mobile }}
+                                            </td>
+                                            <td style="vertical-align: middle; text-align: center">
+                                                {{ $appointment->branch_name }}
+                                            </td>
+                                            <td style="vertical-align: middle; text-align: center">
+                                                @if ($appointment->svc_is_termite == 1)
+                                                    YES
+                                                @else
+                                                    NO
+                                                @endif
+                                            </td>
+                                            <td style="vertical-align: middle; text-align: center">
+                                                @if ($appointment->svc_is_package == 1)
+                                                    YES
+                                                @else
+                                                    NO
+                                                @endif
+                                            </td>
+                                            <td style="vertical-align: middle; text-align: center">
+                                                {{ $appointment->svc_payment_status }}
+                                            </td>
+                                            <td style="vertical-align: middle; text-align: center">
+                                                {{ \Carbon\Carbon::parse($appointment->svca_approved_date)->format('m/d/Y | h:i A') }}
+                                            </td>
+                                            <td style="vertical-align: middle; text-align: center">
+                                                {{ \Carbon\Carbon::parse($appointment->svca_approved_time_from)->format('h:iA') }}
+                                                -
+                                                {{ \Carbon\Carbon::parse($appointment->svca_approved_time_to)->format('h:iA') }}
+                                            </td>
+                                            <td style="vertical-align: middle; text-align: center">
+                                                {{ $appointment->tech_first_name ? $appointment->tech_first_name . ' ' . $appointment->tech_last_name : 'Unassigned' }}
+                                            </td>
+                                            <td style="vertical-align: middle; text-align: center">
+                                                {{ $appointment->svc_status }}
+                                            </td>
+                                            <td style="vertical-align: middle; text-align: center">
+                                                <a class="btn btn-primary btn-sm mb-1"
+                                                    href="{{ url('service/orders/appointments/scheduled/' . $appointment->svc_id) }}">
+                                                    <span class="fa fa-eye"></span>
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
 
-                // Hour grid lines
-                for (let h = HOURS_START; h <= HOURS_END; h++) {
-                    const line = document.createElement('div');
-                    line.style.cssText =
-                        `position:absolute; top:0; bottom:0; left:${pct(h)}; width:0.5px; background:#e0e0e0;`;
-                    track.appendChild(line);
-                }
+    {{-- Dynamic Search While Typing --}}
+    <script>
+        document.getElementById("searchInput").addEventListener("keyup", function() {
+            let value = this.value.toLowerCase();
 
-                // Existing appointment blocks for this technician
-                const existingSlots = DAY_SCHEDULES[techId] || [];
-                existingSlots.forEach(ev => {
-                    const evFrom = parseTime(ev.svca_approved_time_from);
-                    const evTo = parseTime(ev.svca_approved_time_to);
-                    if (evFrom === null || evTo === null) return;
-                    const dispFrom = Math.max(evFrom, HOURS_START);
-                    const dispTo = Math.min(evTo, HOURS_END);
-                    if (dispFrom >= dispTo) return;
+            // Select all tables with ID containing "Table"
+            let tables = document.querySelectorAll('table[id*="Table"]');
 
-                    const contactParts = [
-                        'Email: ' + ev.usr_email,
-                        'Number: 0' + ev.usr_mobile
-                    ].filter(p => p && p.trim());
+            tables.forEach(function(table) {
+                let rows = table.querySelectorAll("tbody tr");
 
-                    const addressParts = [
-                        'Address: ' + ev.uadd_street,
-                        ev.uadd_barangay,
-                        ev.uadd_city,
-                        ev.uadd_province,
-                        ev.uadd_region
-                    ].filter(p => p && p.trim());
-
-                    const distanceLine = ev.svc_km_distance ?
-                        'Distance: ' + ev.svc_km_distance + 'KM from office' :
-                        null;
-
-                    let dateAssignedLine = null;
-                    if (ev.svcas_date_assigned) {
-                        const d = new Date(ev.svcas_date_assigned);
-                        const mm = String(d.getMonth() + 1).padStart(2, '0');
-                        const dd = String(d.getDate()).padStart(2, '0');
-                        const yyyy = d.getFullYear();
-                        dateAssignedLine = 'Date Assigned: ' + mm + '/' + dd + '/' + yyyy;
-                    }
-
-                    const assignedByLine = (ev.assigner_first_name && ev.assigner_last_name) ?
-                        'Assigned By: ' + ev.assigner_first_name + ' ' + ev.assigner_last_name :
-                        null;
-
-                    const addr = [
-                        ...contactParts,
-                        addressParts.join(', '),
-                        distanceLine,
-                        dateAssignedLine,
-                        assignedByLine
-                    ].filter(Boolean).join('<br>');
-
-                    track.appendChild(makeBlock(
-                        dispFrom, dispTo,
-                        ev.usr_first_name + ' ' + ev.usr_last_name,
-                        addr,
-                        '#B5D4F4', '#0C447C', '#85B7EB'
-                    ));
+                rows.forEach(function(row) {
+                    let text = row.innerText.toLowerCase();
+                    row.style.display = text.includes(value) ? "" : "none";
                 });
-
-                // ── FIX 2: "This appointment" block color depends on whether selected tech is the assigned one ──
-                if (NEW_FROM !== null && NEW_TO !== null) {
-                    const dispFrom = Math.max(NEW_FROM, HOURS_START);
-                    const dispTo = Math.min(NEW_TO, HOURS_END);
-                    const isAssigned = String(techId) === String(CURRENT_TECH_ID);
-
-                    if (dispFrom < dispTo) {
-                        track.appendChild(makeBlock(
-                            dispFrom, dispTo,
-                            'This appointment', '',
-                            isAssigned ? '#B5D4F4' : '#C0DD97',
-                            isAssigned ? '#0C447C' : '#27500A',
-                            isAssigned ? '#85B7EB' : '#97C459'
-                        ));
-                    }
-                }
-
-                rowWrap.appendChild(track);
-                container.appendChild(rowWrap);
-            }
-
-            function makeBlock(from, to, label, addr, bg, color, border) {
-                const blk = document.createElement('div');
-                const leftPct = ((from - HOURS_START) / TOTAL_HRS * 100).toFixed(4) + '%';
-                const widthPct = ((to - from) / TOTAL_HRS * 100).toFixed(4) + '%';
-                blk.style.cssText = [
-                    'position:absolute; top:4px; bottom:4px;',
-                    'left:' + leftPct + '; width:' + widthPct + ';',
-                    'background:' + bg + '; color:' + color + '; border:0.5px solid ' + border + ';',
-                    'border-radius:5px; display:flex; align-items:center; justify-content:center;',
-                    'font-size:11px; font-weight:500; overflow:hidden; white-space:nowrap;',
-                    'text-overflow:ellipsis; padding:0 6px; cursor:default;'
-                ].join('');
-                blk.textContent = label;
-                blk.addEventListener('mouseenter', e => showTooltip(e, label, addr));
-                blk.addEventListener('mousemove', moveTooltip);
-                blk.addEventListener('mouseleave', hideTooltip);
-                return blk;
-            }
-
-            let tt = null;
-
-            function ensureTT() {
-                if (!tt) {
-                    tt = document.createElement('div');
-                    tt.style.cssText = [
-                        'position:fixed; background:#fff; border:0.5px solid #ccc;',
-                        'border-radius:8px; padding:8px 12px; font-size:12px;',
-                        'pointer-events:none; z-index:9999; display:none;',
-                        'box-shadow:0 4px 12px rgba(0,0,0,.08); max-width:220px; line-height:1.5;'
-                    ].join('');
-                    document.body.appendChild(tt);
-                }
-            }
-
-            function showTooltip(e, label, addr) {
-                ensureTT();
-                tt.innerHTML = '<strong>' + label + '</strong>' + (addr ? '<br>' + addr : '');
-                tt.style.display = 'block';
-                moveTooltip(e);
-            }
-
-            function moveTooltip(e) {
-                if (tt) {
-                    tt.style.left = (e.clientX + 14) + 'px';
-                    tt.style.top = (e.clientY + 14) + 'px';
-                }
-            }
-
-            function hideTooltip() {
-                if (tt) tt.style.display = 'none';
-            }
-        })();
+            });
+        });
     </script>
+@endsection
 
+reference:
+public function scheduled_appointments_view($svc_id)
+    {
+        $display = DB::table('services')
+            ->leftJoin('users', 'services.usr_id', '=', 'users.usr_id')
+            ->leftJoin('branches', 'services.branch_id', '=', 'branches.branch_id')
+            ->leftJoin('service_appointments', 'services.svc_id', '=', 'service_appointments.svc_id')
+            ->leftJoin('user_addresses', 'service_appointments.uadd_id', '=', 'user_addresses.uadd_id')
+            ->leftJoin('addresses', 'user_addresses.add_id', '=', 'addresses.add_id')
+            ->leftJoin('users as approver', 'service_appointments.svca_approved_by', '=', 'approver.usr_id')
+            ->leftJoin('service_appointment_schedules', 'service_appointments.svca_id', '=', 'service_appointment_schedules.svca_id')
+            ->leftJoin('users as assigned_to', 'service_appointment_schedules.svcas_assigned_to', '=', 'assigned_to.usr_id')
+            ->where('services.svc_id', $svc_id)
+            ->select(
+                'services.svc_id',
+                'services.svc_sa_number',
+                'services.svc_km_distance',
+                'services.svc_property_type',
+                'services.svc_is_package',
+                'services.svcpat_id',
+                'services.svc_is_termite',
+                'services.svc_type_treatment',
+                'services.svc_sqm_initial',
+                'services.svc_sqm_final',
+                'services.svc_with_device',
+                'services.svc_device_count',
+                'services.svc_problem_description',
+                'services.svc_status',
+                'services.svc_infestation',
+                'services.svc_initial_price',
+                'services.svc_location_price',
+                'services.svc_device_price',
+                'services.svc_fixed_price',
+                'services.svc_final_price',
+                'services.svc_balance',
+                'services.svc_payment_status',
+                'services.svc_assessment_recommendation',
+                'services.svc_chemical_quantity',
+                'services.svc_chemical_metric',
+                'users.usr_first_name',
+                'users.usr_last_name',
+                'users.usr_email',
+                'users.usr_mobile',
+                'branches.branch_id',
+                'branches.branch_name',
+                'service_appointments.svca_client_date',
+                'service_appointments.svca_client_time',
+                'service_appointments.svca_approved_date',
+                'service_appointments.svca_approved_time_from',
+                'service_appointments.svca_approved_time_to',
+                'service_appointments.svca_date_approved',
+                'approver.usr_first_name as approved_first_name',
+                'approver.usr_last_name as approved_last_name',
+                'service_appointment_schedules.svcas_assigned_to as current_technician_id',  // <-- added
+                'service_appointment_schedules.svcas_date_assigned',
+                'assigned_to.usr_first_name as assigned_first_name',
+                'assigned_to.usr_last_name as assigned_last_name',
+                'user_addresses.uadd_street',
+                'user_addresses.uadd_barangay',
+                'user_addresses.uadd_city',
+                'user_addresses.uadd_province',
+                'user_addresses.uadd_region',
+                'addresses.add_name'
+            )
+            ->first();
+
+        $pestTypes = DB::table('service_order_pests')
+            ->leftJoin('service_packages', 'service_order_pests.svcp_id', '=', 'service_packages.svcp_id')
+            ->where('service_order_pests.svc_id', $svc_id)
+            ->where('service_order_pests.svcop_active', 1)
+            ->select(
+                'service_order_pests.svcop_id',
+                'service_packages.svcp_id',
+                'service_packages.svcp_pest_type'
+            )
+            ->get();
+
+        $serviceAreas = DB::table('service_orders')
+            ->leftJoin('service_package_areas', 'service_orders.svcpa_id', '=', 'service_package_areas.svcpa_id')
+            ->where('service_orders.svc_id', $svc_id)
+            ->whereNull('service_orders.svcpat_id')
+            ->where('service_orders.svco_active', 1)
+            ->select(
+                'service_orders.svco_id',
+                'service_package_areas.svcpa_id',
+                'service_package_areas.svcpa_area',
+                'service_package_areas.svcpa_cost'
+            )
+            ->get();
+
+        $termiteAreas = DB::table('service_orders')
+            ->leftJoin('service_package_area_termites', 'service_orders.svcpat_id', '=', 'service_package_area_termites.svcpat_id')
+            ->where('service_orders.svc_id', $svc_id)
+            ->whereNotNull('service_orders.svcpat_id')
+            ->where('service_orders.svco_active', 1)
+            ->select(
+                'service_orders.svco_id',
+                'service_package_area_termites.svcpat_id',
+                'service_package_area_termites.svcpat_sqm_details',
+                'service_package_area_termites.svcpat_cost'
+            )
+            ->get();
+
+        $appointmentImages = DB::table('service_appointment_images')
+            ->join('service_appointments', 'service_appointment_images.svca_id', '=', 'service_appointments.svca_id')
+            ->where('service_appointments.svc_id', $svc_id)
+            ->where('service_appointment_images.svcap_active', 1)
+            ->select('service_appointment_images.*')
+            ->get();
+
+        $approvedDate = null;
+        $approvedTimeFrom = null;
+        $approvedTimeTo = null;
+
+        $appointment = DB::table('service_appointments')
+            ->where('svc_id', $svc_id)
+            ->first();
+
+        if ($appointment) {
+            $approvedDate = $appointment->svca_approved_date;
+            $approvedTimeFrom = $appointment->svca_approved_time_from;
+            $approvedTimeTo = $appointment->svca_approved_time_to;
+        }
+
+        $dayName = $approvedDate
+            ? strtoupper(Carbon::parse($approvedDate)->format('l'))
+            : null;
+
+        $technicians = DB::table('users')
+            ->where('utyp_id', 2)
+            ->where('usr_active', 1)
+            ->where('branch_id', $display->branch_id)
+            ->orderBy('usr_last_name', 'asc')
+            ->select('usr_id', 'usr_first_name', 'usr_last_name')
+            ->get()
+            ->map(function ($tech) use ($dayName, $approvedDate, $approvedTimeFrom, $approvedTimeTo) {
+                $isRestDay = false;
+                if ($dayName) {
+                    $avail = DB::table('user_availabilities')
+                        ->where('usr_id', $tech->usr_id)
+                        ->where('uavail_name', $dayName)
+                        ->first();
+                    $isRestDay = !$avail || $avail->uavail_active == 0;
+                }
+
+                $isBusy = false;
+                if ($approvedDate && $approvedTimeFrom && $approvedTimeTo) {
+                    $conflict = DB::table('service_appointment_schedules')
+                        ->join('service_appointments', 'service_appointments.svca_id', '=', 'service_appointment_schedules.svca_id')
+                        ->where('service_appointment_schedules.svcas_assigned_to', $tech->usr_id)
+                        ->where('service_appointment_schedules.svcas_active', 1)
+                        ->where('service_appointments.svca_approved_date', $approvedDate)
+                        ->where('service_appointments.svca_approved_time_from', '<', $approvedTimeTo)
+                        ->where('service_appointments.svca_approved_time_to', '>', $approvedTimeFrom)
+                        ->first();
+                    $isBusy = (bool) $conflict;
+                }
+
+                $tech->is_rest_day = $isRestDay;
+                $tech->is_busy = $isBusy;
+                return $tech;
+            });
+
+        // Existing schedules for the timeline (all techs, same date)
+        $daySchedules = [];
+        if ($approvedDate) {
+            $rows = DB::table('service_appointment_schedules')
+                ->join('service_appointments', 'service_appointments.svca_id', '=', 'service_appointment_schedules.svca_id')
+                ->join('services', 'services.svc_id', '=', 'service_appointments.svc_id')
+                ->join('users as clients', 'clients.usr_id', '=', 'services.usr_id')
+                ->leftJoin('user_addresses', 'service_appointments.uadd_id', '=', 'user_addresses.uadd_id')
+                ->leftJoin('users as assigner', 'assigner.usr_id', '=', 'service_appointment_schedules.svcas_assigned_by')
+                ->where('service_appointment_schedules.svcas_active', 1)
+                ->where('service_appointments.svca_approved_date', $approvedDate)
+                ->select(
+                    'service_appointment_schedules.svcas_assigned_to',
+                    'service_appointment_schedules.svcas_date_assigned',
+                    'service_appointment_schedules.svcas_assigned_by',
+                    'assigner.usr_first_name as assigner_first_name',
+                    'assigner.usr_last_name as assigner_last_name',
+                    'service_appointments.svca_approved_time_from',
+                    'service_appointments.svca_approved_time_to',
+                    'service_appointments.svc_id as appt_svc_id',   // <-- added to identify THIS appointment
+                    'clients.usr_first_name',
+                    'clients.usr_last_name',
+                    'clients.usr_email',
+                    'clients.usr_mobile',
+                    'user_addresses.uadd_street',
+                    'user_addresses.uadd_barangay',
+                    'user_addresses.uadd_city',
+                    'user_addresses.uadd_province',
+                    'user_addresses.uadd_region',
+                    'services.svc_km_distance'
+                )
+                ->get();
+
+            foreach ($rows as $row) {
+                $daySchedules[$row->svcas_assigned_to][] = $row;
+            }
+        }
+
+        $allTechs = $technicians->map(function ($t) {
+            return [
+                'id' => $t->usr_id,
+                'label' => $t->usr_last_name . ', ' . substr($t->usr_first_name, 0, 1) . '.',
+                'is_rest' => $t->is_rest_day,
+                'is_busy' => $t->is_busy,
+            ];
+        })->values();
+
+        return view('service_orders.appointments.scheduled.view_scheduled', compact(
+            'display',
+            'pestTypes',
+            'serviceAreas',
+            'termiteAreas',
+            'appointmentImages',
+            'technicians',
+            'approvedDate',
+            'approvedTimeFrom',
+            'approvedTimeTo',
+            'daySchedules',
+            'allTechs'
+        ));
+    }
+
+    {{-- Change Technician Modal --}}
     <div class="modal fade" id="changeTechnicianModal" tabindex="-1" role="dialog"
         aria-labelledby="changeTechnicianModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-xl" role="document">
@@ -356,3 +574,509 @@
             </form>
         </div>
     </div>
+
+<script>
+    (function() {
+        const HOURS_START = 0;
+        const HOURS_END = 24;
+        const TOTAL_HRS = HOURS_END - HOURS_START;
+        const ROW_HEIGHT = 36;
+
+        const NEW_FROM_STR = "{{ $approvedTimeFrom }}";
+        const NEW_TO_STR = "{{ $approvedTimeTo }}";
+        const DAY_SCHEDULES = @json($daySchedules);
+
+        const CURRENT_TECH_ID = "{{ $display->current_technician_id }}";
+
+        function parseTime(str) {
+            if (!str) return null;
+            const parts = str.split(':');
+            return parseInt(parts[0]) + parseInt(parts[1]) / 60;
+        }
+
+        const NEW_FROM = parseTime(NEW_FROM_STR);
+        const NEW_TO = parseTime(NEW_TO_STR);
+
+        function pct(h) {
+            return ((h - HOURS_START) / TOTAL_HRS * 100).toFixed(4) + '%';
+        }
+
+        function loadDefaultTechnician() {
+            const select = document.getElementById('technicianSelect');
+            if (!select) return;
+
+            const techId = select.value;
+            const wrap = document.getElementById('techTimelineWrap');
+            const noTechMsg = document.getElementById('noTechSelected');
+
+            if (!techId) {
+                wrap.style.display = 'none';
+                noTechMsg.style.display = 'block';
+                return;
+            }
+
+            wrap.style.display = 'block';
+            noTechMsg.style.display = 'none';
+            renderTimeline(techId);
+        }
+
+        // Auto-load current selected technician
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDefaultTechnician();
+        });
+
+        // Also load when modal opens
+        $('#changeTechnicianModal').on('shown.bs.modal', function() {
+            loadDefaultTechnician();
+        });
+
+        // Change technician
+        document.getElementById('technicianSelect').addEventListener('change', function() {
+            const techId = this.value;
+            const wrap = document.getElementById('techTimelineWrap');
+            const noTechMsg = document.getElementById('noTechSelected');
+
+            if (!techId) {
+                wrap.style.display = 'none';
+                noTechMsg.style.display = 'block';
+                return;
+            }
+
+            wrap.style.display = 'block';
+            noTechMsg.style.display = 'none';
+            renderTimeline(techId);
+        });
+
+        function renderTimeline(techId) {
+            const container = document.getElementById('techTimeline');
+            container.innerHTML = '';
+
+            // Hour axis
+            const axis = document.createElement('div');
+            axis.style.cssText =
+                `display:flex; margin-left:0; position:relative; height:20px; margin-bottom:4px;`;
+
+            for (let h = HOURS_START; h <= HOURS_END; h++) {
+                const span = document.createElement('span');
+                const leftPct = ((h - HOURS_START) / TOTAL_HRS * 100).toFixed(4) + '%';
+
+                span.style.cssText =
+                    `position:absolute; left:${leftPct}; transform:translateX(-50%); font-size:10px; color:#999; white-space:nowrap;`;
+
+                const h12 = h === 0 || h === 24 ? 12 : h > 12 ? h - 12 : h;
+                const ampm = h < 12 || h === 0 ? 'am' : 'pm';
+
+                span.textContent = h12 + ampm;
+                axis.appendChild(span);
+            }
+
+            container.appendChild(axis);
+
+            const rowWrap = document.createElement('div');
+            rowWrap.style.cssText =
+                `display:flex; align-items:center; margin-bottom:2px;`;
+
+            const track = document.createElement('div');
+            track.style.cssText =
+                `flex:1; position:relative; height:${ROW_HEIGHT}px; background:#f7f7f7; border:0.5px solid #ddd; border-radius:6px; overflow:visible;`;
+
+            // Hour grid lines
+            for (let h = HOURS_START; h <= HOURS_END; h++) {
+                const line = document.createElement('div');
+                line.style.cssText =
+                    `position:absolute; top:0; bottom:0; left:${pct(h)}; width:0.5px; background:#e0e0e0;`;
+                track.appendChild(line);
+            }
+
+            // Existing appointments
+            const existingSlots = DAY_SCHEDULES[techId] || [];
+
+            existingSlots.forEach(ev => {
+                const evFrom = parseTime(ev.svca_approved_time_from);
+                const evTo = parseTime(ev.svca_approved_time_to);
+
+                if (evFrom === null || evTo === null) return;
+
+                const dispFrom = Math.max(evFrom, HOURS_START);
+                const dispTo = Math.min(evTo, HOURS_END);
+
+                if (dispFrom >= dispTo) return;
+
+                const contactParts = [
+                    ev.usr_email ? 'Email: ' + ev.usr_email : null,
+                    ev.usr_mobile ? 'Number: 0' + ev.usr_mobile : null
+                ].filter(Boolean);
+
+                const addressParts = [
+                    ev.uadd_street ? 'Address: ' + ev.uadd_street : null,
+                    ev.uadd_barangay,
+                    ev.uadd_city,
+                    ev.uadd_province,
+                    ev.uadd_region
+                ].filter(Boolean);
+
+                const distanceLine = ev.svc_km_distance ?
+                    'Distance: ' + ev.svc_km_distance + 'KM from office' :
+                    null;
+
+                let dateAssignedLine = null;
+
+                if (ev.svcas_date_assigned) {
+                    const d = new Date(ev.svcas_date_assigned);
+                    const mm = String(d.getMonth() + 1).padStart(2, '0');
+                    const dd = String(d.getDate()).padStart(2, '0');
+                    const yyyy = d.getFullYear();
+
+                    dateAssignedLine =
+                        'Date Assigned: ' + mm + '/' + dd + '/' + yyyy;
+                }
+
+                const assignedByLine =
+                    (ev.assigner_first_name && ev.assigner_last_name) ?
+                    'Assigned By: ' + ev.assigner_first_name + ' ' + ev.assigner_last_name :
+                    null;
+
+                const addr = [
+                    ...contactParts,
+                    addressParts.join(', '),
+                    distanceLine,
+                    dateAssignedLine,
+                    assignedByLine
+                ].filter(Boolean).join('<br>');
+
+                track.appendChild(
+                    makeBlock(
+                        dispFrom,
+                        dispTo,
+                        ev.usr_first_name + ' ' + ev.usr_last_name,
+                        addr,
+                        '#B5D4F4',
+                        '#0C447C',
+                        '#85B7EB'
+                    )
+                );
+            });
+
+            // Current appointment
+            if (NEW_FROM !== null && NEW_TO !== null) {
+                const dispFrom = Math.max(NEW_FROM, HOURS_START);
+                const dispTo = Math.min(NEW_TO, HOURS_END);
+                const isAssigned =
+                    String(techId) === String(CURRENT_TECH_ID);
+
+                if (dispFrom < dispTo) {
+                    track.appendChild(
+                        makeBlock(
+                            dispFrom,
+                            dispTo,
+                            'This appointment',
+                            '',
+                            isAssigned ? '#B5D4F4' : '#C0DD97',
+                            isAssigned ? '#0C447C' : '#27500A',
+                            isAssigned ? '#85B7EB' : '#97C459'
+                        )
+                    );
+                }
+            }
+
+            rowWrap.appendChild(track);
+            container.appendChild(rowWrap);
+        }
+
+        function makeBlock(from, to, label, addr, bg, color, border) {
+            const blk = document.createElement('div');
+
+            const leftPct =
+                ((from - HOURS_START) / TOTAL_HRS * 100).toFixed(4) + '%';
+
+            const widthPct =
+                ((to - from) / TOTAL_HRS * 100).toFixed(4) + '%';
+
+            blk.style.cssText = [
+                'position:absolute; top:4px; bottom:4px;',
+                'left:' + leftPct + '; width:' + widthPct + ';',
+                'background:' + bg + '; color:' + color +
+                '; border:0.5px solid ' + border + ';',
+                'border-radius:5px; display:flex; align-items:center; justify-content:center;',
+                'font-size:11px; font-weight:500; overflow:hidden; white-space:nowrap;',
+                'text-overflow:ellipsis; padding:0 6px; cursor:default;'
+            ].join('');
+
+            blk.textContent = label;
+
+            blk.addEventListener('mouseenter',
+                e => showTooltip(e, label, addr)
+            );
+
+            blk.addEventListener('mousemove', moveTooltip);
+            blk.addEventListener('mouseleave', hideTooltip);
+
+            return blk;
+        }
+
+        let tt = null;
+
+        function ensureTT() {
+            if (!tt) {
+                tt = document.createElement('div');
+
+                tt.style.cssText = [
+                    'position:fixed; background:#fff; border:0.5px solid #ccc;',
+                    'border-radius:8px; padding:8px 12px; font-size:12px;',
+                    'pointer-events:none; z-index:9999; display:none;',
+                    'box-shadow:0 4px 12px rgba(0,0,0,.08); max-width:220px; line-height:1.5;'
+                ].join('');
+
+                document.body.appendChild(tt);
+            }
+        }
+
+        function showTooltip(e, label, addr) {
+            ensureTT();
+
+            tt.innerHTML =
+                '<strong>' + label + '</strong>' +
+                (addr ? '<br>' + addr : '');
+
+            tt.style.display = 'block';
+            moveTooltip(e);
+        }
+
+        function moveTooltip(e) {
+            if (tt) {
+                tt.style.left = (e.clientX + 14) + 'px';
+                tt.style.top = (e.clientY + 14) + 'px';
+            }
+        }
+
+        function hideTooltip() {
+            if (tt) tt.style.display = 'none';
+        }
+    })();
+</script>
+
+<script>
+    (function() {
+        const HOURS_START = 0;
+        const HOURS_END = 24;
+        const TOTAL_HRS = HOURS_END - HOURS_START;
+        const ROW_HEIGHT = 36;
+        const LABEL_W = 110;
+
+        const NEW_FROM_STR = "{{ $approvedTimeFrom }}";
+        const NEW_TO_STR = "{{ $approvedTimeTo }}";
+        const DAY_SCHEDULES = @json($daySchedules);
+        const ALL_TECHS = @json($allTechs);
+
+        const CURRENT_TECH_ID = "{{ $display->current_technician_id }}";
+
+        function parseTime(str) {
+            if (!str) return null;
+            const p = str.split(':');
+            return parseInt(p[0]) + parseInt(p[1]) / 60;
+        }
+
+        const NEW_FROM = parseTime(NEW_FROM_STR);
+        const NEW_TO = parseTime(NEW_TO_STR);
+
+        function pct(h) {
+            return ((h - HOURS_START) / TOTAL_HRS * 100).toFixed(4) + '%';
+        }
+
+        function buildAllTechTimeline() {
+            const container = document.getElementById('allTechTimeline');
+            if (!container) return;
+            container.innerHTML = '';
+
+            // Hour axis
+            const axis = document.createElement('div');
+            axis.style.cssText =
+                `display:flex; position:relative; height:20px; margin-bottom:4px; margin-left:${LABEL_W}px;`;
+            for (let h = HOURS_START; h <= HOURS_END; h++) {
+                const span = document.createElement('span');
+                const leftPct = ((h - HOURS_START) / TOTAL_HRS * 100).toFixed(4) + '%';
+                span.style.cssText =
+                    `position:absolute; left:${leftPct}; transform:translateX(-50%); font-size:10px; color:#999; white-space:nowrap;`;
+                const h12 = h === 0 || h === 24 ? 12 : h > 12 ? h - 12 : h;
+                const ampm = h < 12 || h === 0 ? 'am' : 'pm';
+                span.textContent = h12 + ampm;
+                axis.appendChild(span);
+            }
+            container.appendChild(axis);
+
+            ALL_TECHS.forEach(tech => {
+                const rowWrap = document.createElement('div');
+                rowWrap.style.cssText = `display:flex; align-items:center; margin-bottom:3px;`;
+
+                const labelDiv = document.createElement('div');
+                const restBusy = tech.is_rest ?
+                    ' <span style="color:#c00;font-size:9px;">(rest)</span>' :
+                    tech.is_busy ?
+                    ' <span style="color:#a06000;font-size:9px;">(busy)</span>' :
+                    '';
+                labelDiv.style.cssText =
+                    `flex:none; width:${LABEL_W}px; font-size:11px; color:#555; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-right:6px;`;
+                labelDiv.innerHTML = tech.label + restBusy;
+                rowWrap.appendChild(labelDiv);
+
+                const track = document.createElement('div');
+                track.style.cssText =
+                    `flex:1; position:relative; height:${ROW_HEIGHT}px; background:#f7f7f7; border:0.5px solid #ddd; border-radius:6px; overflow:visible;`;
+
+                // Hour grid lines
+                for (let h = HOURS_START; h <= HOURS_END; h++) {
+                    const line = document.createElement('div');
+                    line.style.cssText =
+                        `position:absolute; top:0; bottom:0; left:${pct(h)}; width:0.5px; background:#e0e0e0;`;
+                    track.appendChild(line);
+                }
+
+                // Existing appointment blocks
+                const slots = DAY_SCHEDULES[tech.id] || [];
+                slots.forEach(ev => {
+                    const evFrom = parseTime(ev.svca_approved_time_from);
+                    const evTo = parseTime(ev.svca_approved_time_to);
+                    if (evFrom === null || evTo === null) return;
+                    const dF = Math.max(evFrom, HOURS_START);
+                    const dT = Math.min(evTo, HOURS_END);
+                    if (dF >= dT) return;
+
+                    const contactParts = [
+                        'Email: ' + ev.usr_email,
+                        'Number: 0' + ev.usr_mobile
+                    ].filter(p => p && p.trim());
+
+                    const addrParts = [
+                        'Address: ' + ev.uadd_street,
+                        ev.uadd_barangay,
+                        ev.uadd_city,
+                        ev.uadd_province,
+                        ev.uadd_region
+                    ].filter(p => p && p.trim());
+
+                    const distLine = ev.svc_km_distance ?
+                        'Distance: ' + ev.svc_km_distance + 'KM from office' :
+                        null;
+
+                    let dateAssignedLine = null;
+                    if (ev.svcas_date_assigned) {
+                        const d = new Date(ev.svcas_date_assigned);
+                        const mm = String(d.getMonth() + 1).padStart(2, '0');
+                        const dd = String(d.getDate()).padStart(2, '0');
+                        const yyyy = d.getFullYear();
+                        dateAssignedLine = 'Date Assigned: ' + mm + '/' + dd + '/' + yyyy;
+                    }
+
+                    const assignedByLine = (ev.assigner_first_name && ev.assigner_last_name) ?
+                        'Assigned By: ' + ev.assigner_first_name + ' ' + ev.assigner_last_name :
+                        null;
+
+                    const addr = [
+                        ...contactParts,
+                        addrParts.join(', '),
+                        distLine,
+                        dateAssignedLine,
+                        assignedByLine
+                    ].filter(Boolean).join('<br>');
+
+                    track.appendChild(makeBlock(
+                        dF, dT,
+                        ev.usr_first_name + ' ' + ev.usr_last_name,
+                        addr,
+                        '#B5D4F4', '#0C447C', '#85B7EB'
+                    ));
+                });
+
+                if (NEW_FROM !== null && NEW_TO !== null) {
+                    const dF = Math.max(NEW_FROM, HOURS_START);
+                    const dT = Math.min(NEW_TO, HOURS_END);
+                    const isAssigned = String(tech.id) === String(CURRENT_TECH_ID);
+
+                    if (dF < dT) {
+                        track.appendChild(makeBlock(
+                            dF, dT,
+                            'This appointment', '',
+                            isAssigned ? '#B5D4F4' : '#C0DD97',
+                            isAssigned ? '#0C447C' : '#27500A',
+                            isAssigned ? '#85B7EB' : '#97C459'
+                        ));
+                    }
+                }
+
+                rowWrap.appendChild(track);
+                container.appendChild(rowWrap);
+            });
+        }
+
+        function makeBlock(from, to, label, addr, bg, color, border) {
+            const blk = document.createElement('div');
+            const leftPct = ((from - HOURS_START) / TOTAL_HRS * 100).toFixed(4) + '%';
+            const widthPct = ((to - from) / TOTAL_HRS * 100).toFixed(4) + '%';
+            blk.style.cssText = [
+                'position:absolute; top:4px; bottom:4px;',
+                'left:' + leftPct + '; width:' + widthPct + ';',
+                'background:' + bg + '; color:' + color + '; border:0.5px solid ' + border + ';',
+                'border-radius:5px; display:flex; align-items:center; justify-content:center;',
+                'font-size:11px; font-weight:500; overflow:hidden; white-space:nowrap;',
+                'text-overflow:ellipsis; padding:0 6px; cursor:default;'
+            ].join('');
+            blk.textContent = label;
+            blk.addEventListener('mouseenter', e => showTooltip(e, label, addr));
+            blk.addEventListener('mousemove', moveTooltip);
+            blk.addEventListener('mouseleave', hideTooltip);
+            return blk;
+        }
+
+        let tt2 = null;
+
+        function ensureTT() {
+            if (!tt2) {
+                tt2 = document.createElement('div');
+                tt2.style.cssText = [
+                    'position:fixed; background:#fff; border:0.5px solid #ccc;',
+                    'border-radius:8px; padding:8px 12px; font-size:12px;',
+                    'pointer-events:none; z-index:9999; display:none;',
+                    'box-shadow:0 4px 12px rgba(0,0,0,.08); max-width:220px; line-height:1.5;'
+                ].join('');
+                document.body.appendChild(tt2);
+            }
+        }
+
+        function showTooltip(e, label, addr) {
+            ensureTT();
+            tt2.innerHTML = '<strong>' + label + '</strong>' + (addr ? '<br>' + addr : '');
+            tt2.style.display = 'block';
+            moveTooltip(e);
+        }
+
+        function moveTooltip(e) {
+            if (tt2) {
+                tt2.style.left = (e.clientX + 14) + 'px';
+                tt2.style.top = (e.clientY + 14) + 'px';
+            }
+        }
+
+        function hideTooltip() {
+            if (tt2) tt2.style.display = 'none';
+        }
+
+        document.addEventListener('DOMContentLoaded', buildAllTechTimeline);
+
+        if (typeof $ !== 'undefined') {
+            $('#changeTechnicianModal').on('shown.bs.modal', buildAllTechTimeline);
+            $('a[href="#allTechPane"]').on('shown.bs.tab', buildAllTechTimeline);
+        }
+    })();
+</script>
+
+can you help me? What I want is to make my current scheduled appointment timeline view (make it good looking with design but of course stick to bootstrap to make it dynamic with any screensize) add overflow-auto, 
+
+so what I want is to display in the bar the schedule for this day only load, if i click next day it will load another or previous day, or we can change it design to default (the list style table to view all and search client)
+
+we can toggle that or the timeline 
+
+in the timeline we just load this day or when we click next day or previous day
+
+in the timeline display we just display a bar and the time frame, it is just the name of the client then <br> name of the technician, it is centered
+
+now when it is hovered we display the same in the reference
