@@ -1,5 +1,4 @@
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:mobile_app/app/theme.dart';
@@ -7,6 +6,7 @@ import 'package:mobile_app/config/api_config.dart';
 import 'package:mobile_app/shared/shared.dart';
 import 'package:mobile_app/shared/widgets/navigation/app_drawer.dart';
 import 'package:mobile_app/features/appointments/widgets/client_appointment_card.dart';
+import 'package:mobile_app/features/appointments/widgets/client_appointment_pagination.dart';
 
 class ClientAppointmentsPage extends StatefulWidget {
   final String email;
@@ -21,10 +21,16 @@ class ClientAppointmentsPage extends StatefulWidget {
 }
 
 class _ClientAppointmentsPageState extends State<ClientAppointmentsPage> {
+
+  bool isLoadingMore = false;
   bool isLoading = true;
   String selectedFilter = 'All';
 
   List<Map<String, dynamic>> appointments = [];
+
+  int visibleLimit = 10;
+  final int pageSize = 10;
+  final ScrollController _scrollController = ScrollController();
 
   final List<String> filters = [
     'All',
@@ -39,6 +45,15 @@ class _ClientAppointmentsPageState extends State<ClientAppointmentsPage> {
   void initState() {
     super.initState();
     _loadAppointments();
+
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels >=
+              _scrollController.position.maxScrollExtent - 200 &&
+          hasMoreAppointments &&
+          !isLoadingMore) {
+        _loadMoreAppointments();
+      }
+    });
   }
 
   List<Map<String, dynamic>> get filteredAppointments {
@@ -48,6 +63,29 @@ class _ClientAppointmentsPageState extends State<ClientAppointmentsPage> {
       return appointment['status'].toString().toUpperCase() ==
           selectedFilter.toUpperCase();
     }).toList();
+  }
+
+  List<Map<String, dynamic>> get paginatedAppointments {
+    return filteredAppointments.take(visibleLimit).toList();
+  }
+
+  bool get hasMoreAppointments {
+    return visibleLimit < filteredAppointments.length;
+  }
+
+  Future<void> _loadMoreAppointments() async {
+    setState(() {
+      isLoadingMore = true;
+    });
+
+    await Future.delayed(const Duration(milliseconds: 600));
+
+    if (!mounted) return;
+
+    setState(() {
+      visibleLimit += pageSize;
+      isLoadingMore = false;
+    });
   }
 
   Future<void> _loadAppointments() async {
@@ -181,8 +219,14 @@ class _ClientAppointmentsPageState extends State<ClientAppointmentsPage> {
   }
 
   @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final visibleAppointments = filteredAppointments;
+    final visibleAppointments = paginatedAppointments;
 
     return Scaffold(
       backgroundColor: AppTheme.lightGray,
@@ -219,10 +263,21 @@ class _ClientAppointmentsPageState extends State<ClientAppointmentsPage> {
                             color: AppTheme.primaryRed,
                             onRefresh: _loadAppointments,
                             child: ListView.separated(
-                              itemCount: visibleAppointments.length,
+                              controller: _scrollController,
+                              itemCount: visibleAppointments.length + 1,
                               separatorBuilder: (_, __) =>
                                   const SizedBox(height: 12),
                               itemBuilder: (context, index) {
+
+                                if (index == visibleAppointments.length) {
+                                  return ClientAppointmentPagination(
+                                    visibleCount: visibleAppointments.length,
+                                    totalCount: filteredAppointments.length,
+                                    isLoadingMore: isLoadingMore,
+                                    hasMore: hasMoreAppointments,
+                                  );
+                                }
+
                                 return ClientAppointmentCard(
                                   appointment: visibleAppointments[index],
                                 );
@@ -276,6 +331,7 @@ class _ClientAppointmentsPageState extends State<ClientAppointmentsPage> {
             onTap: () {
               setState(() {
                 selectedFilter = filter;
+                visibleLimit = 10;
               });
             },
             child: Container(
