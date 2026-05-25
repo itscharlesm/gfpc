@@ -41,6 +41,8 @@ class BookingAreaCard extends StatelessWidget {
         return 'assets/images/img_storageroom.png';
       case 'WHOLE PROPERTY':
         return 'assets/images/img_wholeproperty.png';
+      case 'OTHERS':
+        return 'assets/images/img_areaothers.png';
       default:
         return 'assets/images/img_defaultcards.png';
     }
@@ -94,6 +96,35 @@ class BookingAreaCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+
+    final sortedAreas = [...serviceAreas];
+
+    sortedAreas.sort((a, b) {
+      final areaA =
+          (a['area'] ?? '').toString().toUpperCase();
+
+      final areaB =
+          (b['area'] ?? '').toString().toUpperCase();
+
+      if (areaA == 'OTHERS' &&
+          areaB == 'WHOLE PROPERTY') {
+        return 1;
+      }
+
+      if (areaA == 'WHOLE PROPERTY' &&
+          areaB == 'OTHERS') {
+        return -1;
+      }
+
+      if (areaA == 'OTHERS') return 1;
+      if (areaB == 'OTHERS') return -1;
+
+      if (areaA == 'WHOLE PROPERTY') return 1;
+      if (areaB == 'WHOLE PROPERTY') return -1;
+
+      return areaA.compareTo(areaB);
+    });
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -123,7 +154,7 @@ class BookingAreaCard extends StatelessWidget {
             itemCount: serviceAreas.length,
             separatorBuilder: (_, __) => const SizedBox(width: 10),
             itemBuilder: (context, index) {
-              final area = serviceAreas[index];
+              final area = sortedAreas[index];
 
               final isSelected = selectedAreas.any(
                 (selected) => selected['id'] == area['id'],
