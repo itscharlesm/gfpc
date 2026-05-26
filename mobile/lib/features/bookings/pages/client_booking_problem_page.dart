@@ -11,6 +11,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mobile_app/features/bookings/widgets/booking_problem_card.dart';
 import 'package:mobile_app/features/bookings/widgets/booking_area_card.dart';
 import 'package:mobile_app/features/bookings/widgets/booking_termite_sqm_card.dart';
+import 'package:mobile_app/features/bookings/widgets/booking_problem_skeleton_load.dart';
 
   class ClientBookingProblemPage extends StatefulWidget {
     final String email;
@@ -103,11 +104,7 @@ import 'package:mobile_app/features/bookings/widgets/booking_termite_sqm_card.da
           title: 'Book Service',
         ),
         body: isPageLoading
-    ? const Center(
-        child: CircularProgressIndicator(
-          color: AppTheme.primaryRed,
-        ),
-      )
+      ? const BookingProblemSkeletonLoad()
       : Column(
           children: [
             const BookingStepIndicator(currentStep: 2),

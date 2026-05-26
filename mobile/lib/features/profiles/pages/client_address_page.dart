@@ -7,6 +7,7 @@ import 'package:mobile_app/features/profiles/widgets/add_address_sheet.dart';
 import 'package:mobile_app/shared/widgets/headers/app_back_header.dart';
 import 'package:mobile_app/features/profiles/widgets/edit_address_sheet.dart';
 import 'package:mobile_app/features/profiles/widgets/delete_address_dialog.dart';
+import 'package:mobile_app/features/profiles/widgets/client_address_skeleton_load.dart';
 
 class ClientAddressPage extends StatefulWidget {
   final String email;
@@ -186,11 +187,7 @@ class _ClientAddressPageState extends State<ClientAddressPage> {
         title: 'My Address',
       ),
       body: isLoading
-      ? const Center(
-          child: CircularProgressIndicator(
-            color: AppTheme.primaryRed,
-          ),
-        )
+      ? const ClientAddressSkeletonLoad()
       : SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
           child: _addressListCard(),

@@ -8,6 +8,7 @@ import 'package:mobile_app/app/theme.dart';
 import 'package:mobile_app/features/bookings/widgets/booking_step_indicator.dart';
 import 'package:mobile_app/shared/widgets/headers/app_back_header.dart';
 import 'package:mobile_app/features/appointments/pages/client_appointments_page.dart';
+import 'package:mobile_app/features/bookings/widgets/booking_review_skeleton_load.dart';
 
 class ClientBookingReviewPage extends StatefulWidget {
   final String email;
@@ -42,6 +43,23 @@ class ClientBookingReviewPage extends StatefulWidget {
 
 class _ClientBookingReviewPageState extends State<ClientBookingReviewPage> {
   bool isSubmitting = false;
+  bool isLoadingReview = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReviewSkeleton();
+  }
+
+  Future<void> _loadReviewSkeleton() async {
+    await Future.delayed(const Duration(milliseconds: 900));
+
+    if (!mounted) return;
+
+    setState(() {
+      isLoadingReview = false;
+    });
+  }
 
   bool get hasTermitesSelected {
     return widget.selectedServicePackages.any(
@@ -217,7 +235,9 @@ class _ClientBookingReviewPageState extends State<ClientBookingReviewPage> {
       appBar: const AppBackHeader(
         title: 'Review Booking',
       ),
-      body: Column(
+      body: isLoadingReview
+        ? const BookingReviewSkeletonLoad()
+        : Column(
         children: [
           const BookingStepIndicator(currentStep: 4),
           Expanded(

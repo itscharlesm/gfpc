@@ -7,6 +7,7 @@ import 'package:mobile_app/shared/shared.dart';
 import 'package:mobile_app/shared/widgets/navigation/app_drawer.dart';
 import 'package:mobile_app/features/appointments/widgets/client_appointment_card.dart';
 import 'package:mobile_app/features/appointments/widgets/client_appointment_pagination.dart';
+import 'package:mobile_app/features/appointments/widgets/client_appointments_skeleton_load.dart';
 
 class ClientAppointmentsPage extends StatefulWidget {
   final String email;
@@ -239,11 +240,7 @@ class _ClientAppointmentsPageState extends State<ClientAppointmentsPage> {
         title: 'My Appointments',
       ),
       body: isLoading
-          ? const Center(
-              child: CircularProgressIndicator(
-                color: AppTheme.primaryRed,
-              ),
-            )
+          ? const ClientAppointmentsSkeletonLoad()
           : Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
