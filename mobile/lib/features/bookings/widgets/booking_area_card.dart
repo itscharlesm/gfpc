@@ -41,6 +41,8 @@ class BookingAreaCard extends StatelessWidget {
         return 'assets/images/img_storageroom.png';
       case 'WHOLE PROPERTY':
         return 'assets/images/img_wholeproperty.png';
+      case 'OTHERS':
+        return 'assets/images/img_areaothers.png';
       default:
         return 'assets/images/img_defaultcards.png';
     }
@@ -53,8 +55,76 @@ class BookingAreaCard extends StatelessWidget {
     }).join(' ');
   }
 
+  void _openImagePreview(BuildContext context, String imagePath) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          backgroundColor: Colors.black,
+          body: SafeArea(
+            child: Stack(
+              children: [
+                Center(
+                  child: InteractiveViewer(
+                    minScale: 1,
+                    maxScale: 4,
+                    child: Image.asset(
+                      imagePath,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: IconButton(
+                    icon: const Icon(
+                      Icons.close,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+
+    final sortedAreas = [...serviceAreas];
+
+    sortedAreas.sort((a, b) {
+      final areaA =
+          (a['area'] ?? '').toString().toUpperCase();
+
+      final areaB =
+          (b['area'] ?? '').toString().toUpperCase();
+
+      if (areaA == 'OTHERS' &&
+          areaB == 'WHOLE PROPERTY') {
+        return 1;
+      }
+
+      if (areaA == 'WHOLE PROPERTY' &&
+          areaB == 'OTHERS') {
+        return -1;
+      }
+
+      if (areaA == 'OTHERS') return 1;
+      if (areaB == 'OTHERS') return -1;
+
+      if (areaA == 'WHOLE PROPERTY') return 1;
+      if (areaB == 'WHOLE PROPERTY') return -1;
+
+      return areaA.compareTo(areaB);
+    });
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -84,11 +154,12 @@ class BookingAreaCard extends StatelessWidget {
             itemCount: serviceAreas.length,
             separatorBuilder: (_, __) => const SizedBox(width: 10),
             itemBuilder: (context, index) {
-              final area = serviceAreas[index];
+              final area = sortedAreas[index];
 
               final isSelected = selectedAreas.any(
                 (selected) => selected['id'] == area['id'],
               );
+              final imagePath = _areaImage(area['area'] ?? '');
 
               return GestureDetector(
                 onTap: () => onToggleArea(area),
@@ -121,9 +192,15 @@ class BookingAreaCard extends StatelessWidget {
                             child: SizedBox(
                               width: 82,
                               height: 82,
-                              child: Image.asset(
-                                _areaImage(area['area'] ?? ''),
-                                fit: BoxFit.contain,
+                              child: GestureDetector(
+                                onLongPress: () => _openImagePreview(
+                                  context,
+                                  imagePath,
+                                ),
+                                child: Image.asset(
+                                  imagePath,
+                                  fit: BoxFit.contain,
+                                ),
                               ),
                             ),
                           ),
@@ -158,51 +235,91 @@ class BookingAreaCard extends StatelessWidget {
           ),
         ),
 
-        if (selectedAreas.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-            decoration: BoxDecoration(
-              color: AppTheme.white,
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(
-                color: AppTheme.primaryRed.withOpacity(0.15),
-              ),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.check_circle,
-                  color: AppTheme.primaryRed,
-                  size: 16,
-                ),
-                const SizedBox(width: 7),
-                Expanded(
-                  child: Text(
-                    '${selectedAreas.length} areas selected',
-                    style: const TextStyle(
-                      color: AppTheme.primaryRed,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                GestureDetector(
-                  onTap: onClearAll,
-                  child: const Text(
-                    'Clear all',
-                    style: TextStyle(
-                      color: AppTheme.primaryRed,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
+       if (selectedAreas.isNotEmpty) ...[
+        const SizedBox(height: 12),
+
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.025),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Colors.black.withOpacity(0.05),
             ),
           ),
-        ],
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.04),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.home_work_outlined,
+                  color: AppTheme.black,
+                  size: 18,
+                ),
+              ),
+
+              const SizedBox(width: 10),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Affected Areas',
+                      style: TextStyle(
+                        color: AppTheme.black,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+
+                    const SizedBox(height: 3),
+
+                    Text(
+                      '${selectedAreas.length} area${selectedAreas.length > 1 ? 's' : ''} selected',
+                      style: const TextStyle(
+                        color: AppTheme.gray,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+
+                    const SizedBox(height: 2),
+                  ],
+                ),
+              ),
+
+              GestureDetector(
+                  onTap: onClearAll,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.white,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'Clear',
+                      style: TextStyle(
+                        color: AppTheme.black,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
       ],
     );
   }
