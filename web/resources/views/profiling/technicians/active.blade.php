@@ -190,9 +190,11 @@
                                 <label for="branch_id">Branch <span class="text-danger">*</span></label>
                                 <select class="form-control" id="branch_id" name="branch_id" required>
                                     @foreach ($branches as $branch)
-                                        <option value="{{ $branch->branch_id }}">
-                                            {{ $branch->branch_name }}
-                                        </option>
+                                        @if ($branch->branch_id != 1)
+                                            <option value="{{ $branch->branch_id }}">
+                                                {{ $branch->branch_name }}
+                                            </option>
+                                        @endif
                                     @endforeach
                                 </select>
                             </div>
