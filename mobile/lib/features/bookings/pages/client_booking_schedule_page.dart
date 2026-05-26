@@ -14,6 +14,7 @@ class ClientBookingSchedulePage extends StatefulWidget {
   final Map<String, dynamic>? selectedTermiteSqm;
   final String description;
   final List<XFile> selectedImages;
+  final double? termiteInputSqm;
 
   const ClientBookingSchedulePage({
     super.key,
@@ -24,6 +25,7 @@ class ClientBookingSchedulePage extends StatefulWidget {
     required this.selectedTermiteSqm,
     required this.description,
     required this.selectedImages,
+    required this.termiteInputSqm,
   });
 
   @override
@@ -110,17 +112,18 @@ class _ClientBookingSchedulePageState extends State<ClientBookingSchedulePage> {
       context,
       MaterialPageRoute(
         builder: (_) => ClientBookingReviewPage(
-        email: widget.email,
-        selectedAddress: widget.selectedAddress,
-        selectedServicePackages: widget.selectedServicePackages,
-        selectedAreas: widget.selectedAreas,
-        selectedTermiteSqm: widget.selectedTermiteSqm,
-        description: widget.description,
-        selectedImages: widget.selectedImages,
-        selectedDate: selectedDate!,
-        selectedTime: selectedTimeWindow!['time']!,
-        selectedUrgency: selectedTimeWindow!['title']!,
-      ),
+          email: widget.email,
+          selectedAddress: widget.selectedAddress,
+          selectedServicePackages: widget.selectedServicePackages,
+          selectedAreas: widget.selectedAreas,
+          selectedTermiteSqm: widget.selectedTermiteSqm,
+          termiteInputSqm: widget.termiteInputSqm,
+          description: widget.description,
+          selectedImages: widget.selectedImages,
+          selectedDate: selectedDate!,
+          selectedTime: selectedTimeWindow!['time']!,
+          selectedUrgency: selectedTimeWindow!['title']!,
+        ),
       ),
     );
   }

@@ -21,6 +21,7 @@ class ClientBookingReviewPage extends StatefulWidget {
   final DateTime selectedDate;
   final String selectedTime;
   final String selectedUrgency;
+  final double? termiteInputSqm;
 
   const ClientBookingReviewPage({
     super.key,
@@ -34,6 +35,7 @@ class ClientBookingReviewPage extends StatefulWidget {
     required this.selectedDate,
     required this.selectedTime,
     required this.selectedUrgency,
+    required this.termiteInputSqm,
   });
 
   @override
@@ -77,10 +79,17 @@ class _ClientBookingReviewPageState extends State<ClientBookingReviewPage> {
   
   double get totalPrice {
     if (hasTermitesSelected && widget.selectedTermiteSqm != null) {
-      return double.tryParse(
+      final sqm = widget.termiteInputSqm ?? 0;
+      final cost = double.tryParse(
             widget.selectedTermiteSqm?['cost'].toString() ?? '0',
           ) ??
           0;
+
+      if (sqm >= 1 && sqm <= 50) {
+        return cost;
+      }
+
+      return sqm * cost;
     }
 
     double total = 0;
@@ -151,6 +160,9 @@ class _ClientBookingReviewPageState extends State<ClientBookingReviewPage> {
       if (hasTermitesSelected && widget.selectedTermiteSqm != null) {
         request.fields['termite_sqm_id'] =
             widget.selectedTermiteSqm!['id'].toString();
+
+        request.fields['termite_sqm_input'] =
+            widget.termiteInputSqm.toString();
       }
 
       request.fields['problem_description'] =
@@ -354,14 +366,18 @@ class _ClientBookingReviewPageState extends State<ClientBookingReviewPage> {
       title: 'Termite Treatment Size',
       children: [
         _MainValue(
-          termiteSqm?['sqm_details'] ?? 'No size selected',
+          '${widget.termiteInputSqm?.toStringAsFixed(0) ?? '0'} sqm',
+        ),
+        const SizedBox(height: 6),
+        _SubValue(
+          termiteSqm?['sqm_details'] ?? 'No matching range',
         ),
 
         const SizedBox(height: 14),
 
         _totalRow(
           'Estimated Total',
-          '₱${double.tryParse((termiteSqm?['cost'] ?? 0).toString())?.toStringAsFixed(2) ?? '0.00'}',
+          '₱${totalPrice.toStringAsFixed(2)}',
         ),
       ],
     );

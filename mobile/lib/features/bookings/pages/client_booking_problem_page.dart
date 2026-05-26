@@ -10,7 +10,7 @@ import 'package:mobile_app/features/bookings/pages/client_booking_schedule_page.
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_app/features/bookings/widgets/booking_problem_card.dart';
 import 'package:mobile_app/features/bookings/widgets/booking_area_card.dart';
-import 'package:mobile_app/features/bookings/widgets/booking_termite_sqm_card.dart';
+import 'package:mobile_app/features/bookings/widgets/booking_termite_sqm_input_card.dart';
 import 'package:mobile_app/features/bookings/widgets/booking_problem_skeleton_load.dart';
 
   class ClientBookingProblemPage extends StatefulWidget {
@@ -29,6 +29,25 @@ import 'package:mobile_app/features/bookings/widgets/booking_problem_skeleton_lo
   }
 
   class _ClientBookingProblemPageState extends State<ClientBookingProblemPage> {
+
+    final TextEditingController sqmController = TextEditingController();
+
+    double? termiteInputSqm;
+    double? termiteComputedPrice;
+    String? matchedSqmRange;
+
+    String? get computedPriceText {
+      if (termiteComputedPrice == null) return null;
+
+      final price = termiteComputedPrice!.toStringAsFixed(0);
+
+      final formatted = price.replaceAllMapped(
+        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+        (Match m) => '${m[1]},',
+      );
+
+      return 'Estimated Price: ₱$formatted';
+    }
 
     List<Map<String, dynamic>> termiteSqmOptions = [];
     Map<String, dynamic>? selectedTermiteSqm;
@@ -93,6 +112,7 @@ import 'package:mobile_app/features/bookings/widgets/booking_problem_skeleton_lo
     @override
     void dispose() {
       descriptionController.dispose();
+      sqmController.dispose();
       super.dispose();
     }
 
@@ -147,6 +167,10 @@ import 'package:mobile_app/features/bookings/widgets/booking_problem_skeleton_lo
                           }
 
                           selectedTermiteSqm = null;
+                          sqmController.clear();
+                          termiteInputSqm = null;
+                          termiteComputedPrice = null;
+                          matchedSqmRange = null;
 
                           selectedServicePackages.removeWhere(
                             (selected) =>
@@ -179,15 +203,11 @@ import 'package:mobile_app/features/bookings/widgets/booking_problem_skeleton_lo
                     const SizedBox(height: 20),
 
                     if (hasTermitesSelected)
-                      BookingTermiteSqmCard(
-                        isLoading: isLoadingTermiteSqm,
-                        termiteSqmOptions: termiteSqmOptions,
-                        selectedTermiteSqm: selectedTermiteSqm,
-                        onSelect: (option) {
-                          setState(() {
-                            selectedTermiteSqm = option;
-                          });
-                        },
+                      BookingTermiteSqmInputCard(
+                        sqmController: sqmController,
+                        onChanged: _handleSqmInput,
+                        matchedRange: matchedSqmRange,
+                        computedPrice: computedPriceText,
                       )
                     else
                       BookingAreaCard(
@@ -468,6 +488,54 @@ import 'package:mobile_app/features/bookings/widgets/booking_problem_skeleton_lo
       );
     }
 
+    List<int> _extractSqmNumbers(String sqmDetails) {
+      return RegExp(r'\d+')
+          .allMatches(sqmDetails)
+          .map((match) => int.tryParse(match.group(0) ?? ''))
+          .whereType<int>()
+          .toList();
+    }
+
+    void _handleSqmInput(String value) {
+      final sqm = double.tryParse(value);
+
+      setState(() {
+        termiteInputSqm = sqm;
+        termiteComputedPrice = null;
+        matchedSqmRange = null;
+        selectedTermiteSqm = null;
+      });
+
+      if (sqm == null || sqm <= 0) return;
+
+      for (final option in termiteSqmOptions) {
+        final sqmDetails = option['sqm_details']?.toString() ?? '';
+        final numbers = _extractSqmNumbers(sqmDetails);
+
+        if (numbers.length < 2) continue;
+
+        final minSqm = numbers[0];
+        final maxSqm = numbers[1];
+
+        if (sqm >= minSqm && sqm <= maxSqm) {
+          final cost = double.tryParse(option['cost'].toString()) ?? 0;
+
+          setState(() {
+            selectedTermiteSqm = option;
+            matchedSqmRange = sqmDetails;
+
+            if (sqm >= 1 && sqm <= 50) {
+              termiteComputedPrice = cost;
+            } else {
+              termiteComputedPrice = sqm * cost;
+            }
+          });
+
+          return;
+        }
+      }
+    }
+
     Widget _bottomBar() {
       return Container(
         padding: const EdgeInsets.all(16),
@@ -486,6 +554,7 @@ import 'package:mobile_app/features/bookings/widgets/booking_problem_skeleton_lo
                         selectedTermiteSqm: selectedTermiteSqm,
                         description: descriptionController.text.trim(),
                         selectedImages: selectedImages,
+                        termiteInputSqm: termiteInputSqm,
                       ),
                     ),
                   );

@@ -23,6 +23,7 @@ class MobileServiceAppointmentController extends Controller
             'is_termite' => 'nullable|in:0,1',
             'termite_sqm_id' => 'nullable|integer',
             'images.*' => 'mimes:jpeg,jpg,png,webp|max:8192',
+            'termite_sqm_input' => 'nullable|numeric|min:1',
         ]);
 
         DB::beginTransaction();
@@ -43,9 +44,46 @@ class MobileServiceAppointmentController extends Controller
             $serviceAreas = json_decode($request->service_areas, true) ?? [];
             $isTermite = $request->is_termite == 1;
             $termiteSqmId = $request->termite_sqm_id;
+            $termiteSqmInput = $request->filled('termite_sqm_input')
+                ? (float) $request->termite_sqm_input
+                : null;
+
             $initialPrice = $request->filled('initial_price')
-                ? $request->initial_price
+                ? (float) $request->initial_price
                 : 0;
+
+            if ($isTermite) {
+                if (!$termiteSqmInput || !$termiteSqmId) {
+                    DB::rollBack();
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Termite property size is required.',
+                    ], 400);
+                }
+
+                $termiteRate = DB::table('service_package_area_termites')
+                    ->where('svcpat_id', $termiteSqmId)
+                    ->where('svcpat_active', 1)
+                    ->first();
+
+                if (!$termiteRate) {
+                    DB::rollBack();
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Invalid termite property size range.',
+                    ], 400);
+                }
+
+                $rate = (float) $termiteRate->svcpat_cost;
+
+                if ($termiteSqmInput >= 1 && $termiteSqmInput <= 50) {
+                    $initialPrice = $rate;
+                } else {
+                    $initialPrice = $termiteSqmInput * $rate;
+                }
+            }
             $address = DB::table('user_addresses')
                 ->where('uadd_id', $request->uadd_id)
                 ->where('usr_id', $user->usr_id)
@@ -136,7 +174,7 @@ class MobileServiceAppointmentController extends Controller
                 'svcpat_id' => $isTermite ? $termiteSqmId : null,
                 'svc_is_termite' => $isTermite ? 1 : 0,
                 'svc_type_treatment' => null,
-                'svc_sqm_initial' => null,
+                'svc_sqm_initial' => $isTermite ? $termiteSqmInput : null,
                 'svc_sqm_final' => null,
                 'svc_with_device' => null,
                 'svc_device_count' => null,
