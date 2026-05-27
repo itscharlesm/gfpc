@@ -199,7 +199,7 @@ import 'package:mobile_app/features/bookings/widgets/booking_problem_skeleton_lo
                         });
                       },
                     ),
-
+                    
                     const SizedBox(height: 20),
 
                     if (hasTermitesSelected)
@@ -207,7 +207,6 @@ import 'package:mobile_app/features/bookings/widgets/booking_problem_skeleton_lo
                         sqmController: sqmController,
                         onChanged: _handleSqmInput,
                         matchedRange: matchedSqmRange,
-                        computedPrice: computedPriceText,
                       )
                     else
                       BookingAreaCard(

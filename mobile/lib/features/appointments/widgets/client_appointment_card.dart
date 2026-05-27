@@ -410,13 +410,13 @@ class _ClientAppointmentCardState extends State<ClientAppointmentCard> {
 
            AppointmentProgress(status: status),
 
-            const SizedBox(height: 12),
+            // const SizedBox(height: 12),
 
-            ViewServiceInformationButton(
-              onTap: () {
-                // TODO: Navigate to service information page later
-              },
-            ),
+            // ViewServiceInformationButton(
+            //   onTap: () {
+            //     // TODO: Navigate to service information page later
+            //   },
+            // ),
           ],
         ],
       ),
@@ -899,50 +899,50 @@ class InfoSummaryBox extends StatelessWidget {
   }
 }
 
-class ViewServiceInformationButton extends StatelessWidget {
-  final VoidCallback onTap;
+// class ViewServiceInformationButton extends StatelessWidget {
+//   final VoidCallback onTap;
 
-  const ViewServiceInformationButton({
-    super.key,
-    required this.onTap,
-  });
+//   const ViewServiceInformationButton({
+//     super.key,
+//     required this.onTap,
+//   });
 
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(14),
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 14,
-        ),
-        decoration: BoxDecoration(
-          color: AppTheme.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppTheme.borderGray),
-        ),
-        child: const Row(
-          children: [
-            Expanded(
-              child: Text(
-                'View Service Information',
-                style: TextStyle(
-                  color: AppTheme.black,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ),
-            Icon(
-              Icons.chevron_right_rounded,
-              color: AppTheme.black,
-              size: 22,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+//   @override
+//   Widget build(BuildContext context) {
+//     return InkWell(
+//       borderRadius: BorderRadius.circular(14),
+//       onTap: onTap,
+//       child: Container(
+//         width: double.infinity,
+//         padding: const EdgeInsets.symmetric(
+//           horizontal: 14,
+//           vertical: 14,
+//         ),
+//         decoration: BoxDecoration(
+//           color: AppTheme.white,
+//           borderRadius: BorderRadius.circular(14),
+//           border: Border.all(color: AppTheme.borderGray),
+//         ),
+//         child: const Row(
+//           children: [
+//             Expanded(
+//               child: Text(
+//                 'View Service Information',
+//                 style: TextStyle(
+//                   color: AppTheme.black,
+//                   fontSize: 12,
+//                   fontWeight: FontWeight.w900,
+//                 ),
+//               ),
+//             ),
+//             Icon(
+//               Icons.chevron_right_rounded,
+//               color: AppTheme.black,
+//               size: 22,
+//             ),
+//           ],
+//         ),
+//       ),
+//     );
+//   }
+// }

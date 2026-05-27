@@ -1,5 +1,4 @@
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:mobile_app/app/theme.dart';
@@ -12,6 +11,7 @@ import 'package:mobile_app/features/profiles/pages/technician_profile_page.dart'
 import 'package:mobile_app/shared/widgets/dialogs/app_confirmation_dialog.dart';
 import 'package:mobile_app/features/bookings/pages/client_booking_location_page.dart';
 import 'package:mobile_app/features/appointments/pages/client_appointments_page.dart';
+import 'package:mobile_app/features/technician_jobs/pages/technician_assigned_jobs_page.dart';
 
 class AppDrawer extends StatefulWidget {
   final int userType; // 3 = Client, 2 = Technician
@@ -212,7 +212,21 @@ class _AppDrawerState extends State<AppDrawer> {
                   _drawerItem(
                     icon: Icons.assignment_rounded,
                     title: 'Assigned Jobs',
-                    onTap: () => Navigator.pop(context),
+                    isSelected: widget.currentPage == 'assigned_jobs',
+                    onTap: () {
+                      Navigator.pop(context);
+
+                      if (widget.currentPage != 'assigned_jobs') {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => TechnicianAssignedJobsPage(
+                              email: widget.email,
+                            ),
+                          ),
+                        );
+                      }
+                    },
                   ),
                   _drawerItem(
                     icon: Icons.location_on_rounded,
