@@ -10,6 +10,7 @@ import 'package:mobile_app/features/profiles/pages/client_edit_profile_page.dart
 import 'package:mobile_app/shared/shared.dart';
 import 'package:mobile_app/features/profiles/pages/client_address_page.dart';
 import 'package:mobile_app/app/theme.dart';
+import 'package:mobile_app/features/profiles/widgets/client_profile_skeleton_load.dart';
 
 class ClientProfilePage extends StatefulWidget {
   final String email;
@@ -112,11 +113,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
         title: "My Profile",
       ),
       body: isLoading
-          ? const Center(
-            child: CircularProgressIndicator(
-              color: AppTheme.primaryRed,
-            ),
-          )
+          ? const ClientProfileSkeletonLoad()
           : SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Column(

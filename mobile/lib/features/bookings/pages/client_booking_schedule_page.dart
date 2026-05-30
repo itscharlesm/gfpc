@@ -4,6 +4,7 @@ import 'package:mobile_app/app/theme.dart';
 import 'package:mobile_app/features/bookings/pages/client_booking_review_page.dart';
 import 'package:mobile_app/features/bookings/widgets/booking_step_indicator.dart';
 import 'package:mobile_app/shared/widgets/headers/app_back_header.dart';
+import 'package:mobile_app/features/bookings/widgets/booking_schedule_skeleton_load.dart';
 
 class ClientBookingSchedulePage extends StatefulWidget {
   final String email;
@@ -13,6 +14,7 @@ class ClientBookingSchedulePage extends StatefulWidget {
   final Map<String, dynamic>? selectedTermiteSqm;
   final String description;
   final List<XFile> selectedImages;
+  final double? termiteInputSqm;
 
   const ClientBookingSchedulePage({
     super.key,
@@ -23,6 +25,7 @@ class ClientBookingSchedulePage extends StatefulWidget {
     required this.selectedTermiteSqm,
     required this.description,
     required this.selectedImages,
+    required this.termiteInputSqm,
   });
 
   @override
@@ -31,6 +34,7 @@ class ClientBookingSchedulePage extends StatefulWidget {
 }
 
 class _ClientBookingSchedulePageState extends State<ClientBookingSchedulePage> {
+  bool isLoadingSchedule = true;
   DateTime? selectedDate;
   Map<String, String>? selectedTimeWindow;
 
@@ -54,6 +58,22 @@ class _ClientBookingSchedulePageState extends State<ClientBookingSchedulePage> {
       'icon': '🌆',
     },
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadScheduleSkeleton();
+  }
+
+  Future<void> _loadScheduleSkeleton() async {
+    await Future.delayed(const Duration(milliseconds: 900));
+
+    if (!mounted) return;
+
+    setState(() {
+      isLoadingSchedule = false;
+    });
+  }
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
@@ -92,17 +112,18 @@ class _ClientBookingSchedulePageState extends State<ClientBookingSchedulePage> {
       context,
       MaterialPageRoute(
         builder: (_) => ClientBookingReviewPage(
-        email: widget.email,
-        selectedAddress: widget.selectedAddress,
-        selectedServicePackages: widget.selectedServicePackages,
-        selectedAreas: widget.selectedAreas,
-        selectedTermiteSqm: widget.selectedTermiteSqm,
-        description: widget.description,
-        selectedImages: widget.selectedImages,
-        selectedDate: selectedDate!,
-        selectedTime: selectedTimeWindow!['time']!,
-        selectedUrgency: selectedTimeWindow!['title']!,
-      ),
+          email: widget.email,
+          selectedAddress: widget.selectedAddress,
+          selectedServicePackages: widget.selectedServicePackages,
+          selectedAreas: widget.selectedAreas,
+          selectedTermiteSqm: widget.selectedTermiteSqm,
+          termiteInputSqm: widget.termiteInputSqm,
+          description: widget.description,
+          selectedImages: widget.selectedImages,
+          selectedDate: selectedDate!,
+          selectedTime: selectedTimeWindow!['time']!,
+          selectedUrgency: selectedTimeWindow!['title']!,
+        ),
       ),
     );
   }
@@ -135,7 +156,9 @@ class _ClientBookingSchedulePageState extends State<ClientBookingSchedulePage> {
       appBar: const AppBackHeader(
         title: 'Book Service',
       ),
-      body: Column(
+      body: isLoadingSchedule
+        ? const BookingScheduleSkeletonLoad()
+        : Column(
         children: [
           const BookingStepIndicator(currentStep: 3),
           Expanded(

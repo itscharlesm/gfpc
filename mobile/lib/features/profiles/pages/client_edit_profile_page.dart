@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:mobile_app/shared/widgets/bottom_sheets/app_bottom_sheet.dart';
+import 'package:mobile_app/features/profiles/widgets/client_edit_profile_skeleton_load.dart';
 
 class ClientEditProfilePage extends StatefulWidget {
   final String email;
@@ -363,7 +364,7 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
         title: "Edit Profile",
       ),
       body: isFetching
-      ? const Center(child: CircularProgressIndicator())
+      ? const ClientEditProfileSkeletonLoad()
       : SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 22, 20, 30),
         child: Column(

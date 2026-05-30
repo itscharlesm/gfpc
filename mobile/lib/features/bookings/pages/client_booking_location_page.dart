@@ -9,6 +9,7 @@ import 'package:mobile_app/shared/shared.dart';
 import 'package:mobile_app/shared/widgets/navigation/app_drawer.dart';
 import 'package:mobile_app/features/profiles/widgets/add_address_sheet.dart';
 import 'package:mobile_app/config/api_config.dart';
+import 'package:mobile_app/features/bookings/widgets/booking_location_skeleton.dart';
 
 class ClientBookingLocationPage extends StatefulWidget {
   final String email;
@@ -177,12 +178,8 @@ class _ClientBookingLocationPageState extends State<ClientBookingLocationPage> {
         title: 'Book Service',
       ),
       body: isLoadingAddresses
-      ? const Center(
-          child: CircularProgressIndicator(
-            color: AppTheme.primaryRed,
-          ),
-        )
-      : Column(
+        ? const BookingLocationSkeletonLoad()
+        : Column(
           children: [
             const BookingStepIndicator(currentStep: 1),
             Expanded(

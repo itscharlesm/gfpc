@@ -16,6 +16,7 @@
     use App\Http\Controllers\api\v1\mobile_controllers\MobileAddressController;
     use App\Http\Controllers\api\v1\mobile_controllers\MobileServicePackageController;
     use App\Http\Controllers\api\v1\mobile_controllers\MobileServiceAppointmentController;
+    use App\Http\Controllers\api\v1\mobile_controllers\MobileTechnicianJobController;
     use App\Models\User;
     use Illuminate\Http\Request;
     use Illuminate\Support\Facades\Route;
@@ -148,4 +149,5 @@
         Route::post('/service-appointments/store', [MobileServiceAppointmentController::class, 'store']);
         Route::get('/service-package-area-termites/{branchId}', [MobileServiceAppointmentController::class, 'getTermiteAreaSizes']);
         Route::post('/appointments/client', [MobileServiceAppointmentController::class, 'clientAppointments']);
+        Route::post('/technician/assigned-jobs', [MobileTechnicianJobController::class, 'assignedJobs']);
     });
