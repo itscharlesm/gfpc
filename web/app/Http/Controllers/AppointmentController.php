@@ -1386,6 +1386,55 @@ class AppointmentController extends Controller
 
         ksort($timelineByTech);
 
+        // ─── ASSESSED appointments (for the same timeline date) ───────────────────
+
+$assessedQuery = DB::table('services')
+    ->leftJoin('users', 'services.usr_id', '=', 'users.usr_id')
+    ->leftJoin('branches', 'services.branch_id', '=', 'branches.branch_id')
+    ->leftJoin('service_appointments', 'service_appointments.svc_id', '=', 'services.svc_id')
+    ->where('services.svc_active', 1)
+    ->where('services.svc_status', 'ASSESSED');
+
+if ($sessionBranchId != 1) {
+    $assessedQuery->where('services.branch_id', $sessionBranchId);
+}
+
+$assessedQuery->select(
+    'services.svc_id',
+    'services.svc_sa_number',
+    'services.svc_is_termite',
+    'services.svc_is_package',
+    'services.svc_status',
+    'services.svc_payment_status',
+    'users.usr_first_name',
+    'users.usr_last_name',
+    'users.usr_email',
+    'users.usr_mobile',
+    'branches.branch_name',
+    'service_appointments.svca_approved_date',
+    'service_appointments.svca_approved_time_from',
+    'service_appointments.svca_approved_time_to'
+);
+
+// Dates that have ASSESSED appointments (for the ! badge in flatpickr)
+$assessedDates = (clone $assessedQuery)
+    ->whereNotNull('service_appointments.svca_approved_date')
+    ->pluck('service_appointments.svca_approved_date')
+    ->map(fn($d) => Carbon::parse($d)->toDateString())
+    ->unique()
+    ->values()
+    ->toArray();
+
+// Assessed rows for the currently selected date
+$assessedRows = (clone $assessedQuery)
+    ->whereDate('service_appointments.svca_approved_date', $tlDate)
+    ->orderBy('service_appointments.svca_approved_time_from', 'asc')
+    ->get();
+
+    // Merged clickable dates (scheduled + assessed)
+$clickableDates = array_values(array_unique(array_merge($availableDates, $assessedDates)));
+sort($clickableDates);
+
         return view(
             'service_orders.appointments.scheduled.scheduled',
             compact(
@@ -1396,7 +1445,10 @@ class AppointmentController extends Controller
                 'timelineByTech',
                 'availableDates',
                 'prevDate',
-                'nextDate'
+                'nextDate',
+                'assessedRows',
+                'assessedDates',
+                'clickableDates'
             )
         );
     }

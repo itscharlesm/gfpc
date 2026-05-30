@@ -1,4 +1,4 @@
-scheduled:
+SCHEDULED:
 public function scheduled_appointments(Request $request)
 {
     $search = $request->search ?? '';
@@ -139,7 +139,7 @@ public function scheduled_appointments(Request $request)
 @extends('layouts.themes.main')
 
 @section('content')
-    {{-- ── Flatpickr CSS ────────────────────────────────────────────────────────── --}}
+    {{-- Flatpickr CSS --}}
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
     <style>
         /* Override flatpickr to match Bootstrap/AdminLTE look */
@@ -164,7 +164,7 @@ public function scheduled_appointments(Request $request)
         }
     </style>
 
-    {{-- ── Content Header ──────────────────────────────────────────────────────── --}}
+    {{-- Content Header --}}
     <div class="content-header">
         <div class="container-fluid">
             <div class="row mb-2">
@@ -184,7 +184,7 @@ public function scheduled_appointments(Request $request)
         </div>
     </div>
 
-    {{-- ── Main Content ─────────────────────────────────────────────────────────── --}}
+    {{-- Main Content --}}
     <section class="content">
         @include('layouts.partials.onclick')
         @include('layouts.partials.alerts')
@@ -193,7 +193,7 @@ public function scheduled_appointments(Request $request)
         <div class="container-fluid">
             <div class="card">
 
-                {{-- ── Card Header: title + toggle ─────────────────────────────── --}}
+                {{-- Card Header: title + toggle --}}
                 <div class="card-header d-flex align-items-center justify-content-between flex-wrap" style="gap:10px;">
                     <h3 class="card-title mb-0">
                         <i class="far fa-calendar-alt mr-1"></i>
@@ -325,7 +325,7 @@ public function scheduled_appointments(Request $request)
                     <script>
                         (function() {
 
-                            /* ── Config ──────────────────────────────────────── */
+                            /* Config */
                             const HOURS_S = 0; // timeline start hour (12am)
                             const HOURS_E = 23; // timeline end hour  (11pm)
                             const TOTAL = HOURS_E - HOURS_S;
@@ -335,7 +335,7 @@ public function scheduled_appointments(Request $request)
 
                             const DATA = @json($tlDataForJs);
 
-                            /* ── Helpers ─────────────────────────────────────── */
+                            /* Helpers */
                             function parseTm(s) {
                                 if (!s) return null;
                                 const p = s.split(':');
@@ -355,7 +355,7 @@ public function scheduled_appointments(Request $request)
                                 return h12 + (m !== '00' ? ':' + m : '') + ' ' + ampm;
                             }
 
-                            /* ── Tooltip ─────────────────────────────────────── */
+                            /* Tooltip */
                             let tt = null;
 
                             function ensureTT() {
@@ -394,7 +394,7 @@ public function scheduled_appointments(Request $request)
                                 if (tt) tt.style.display = 'none';
                             }
 
-                            /* ── Build block ─────────────────────────────────── */
+                            /* Build block */
                             function makeBlock(row) {
                                 const frm = parseTm(row.from);
                                 const to_ = parseTm(row.to);
@@ -467,7 +467,7 @@ public function scheduled_appointments(Request $request)
                                 return blk;
                             }
 
-                            /* ── Build timeline ──────────────────────────────── */
+                            /* Build timeline */
                             function buildTimeline() {
                                 const container = document.getElementById('tlContainer');
                                 if (!container || !DATA.length) return;
@@ -561,15 +561,220 @@ public function scheduled_appointments(Request $request)
 
                         })();
                     </script>
-                    {{-- end view toggle --}}
-
                 </div>
-                {{-- /.card-body --}}
-
             </div>
-            {{-- /.card --}}
         </div>
-        {{-- /.container-fluid --}}
-
     </section>
 @endsection
+
+Route::get('service/orders/appointments/assessed', [AppointmentController::class, 'assessed_appointments']);
+
+ASSESSED:
+Route::get('service/orders/appointments/assessed', [AppointmentController::class, 'assessed_appointments']);
+
+public function assessed_appointments(Request $request)
+{
+    $search = $request->search ?? '';
+    $sessionBranchId = session('branch_id');
+
+    $query = DB::table('services')
+        ->leftJoin('users', 'services.usr_id', '=', 'users.usr_id')
+        ->leftJoin('branches', 'services.branch_id', '=', 'branches.branch_id')
+        ->leftJoin('service_appointments', 'service_appointments.svc_id', '=', 'services.svc_id')
+        ->where('services.svc_active', 1)
+        ->where('services.svc_status', 'ASSESSED');
+
+    // Branch filter
+    if ($sessionBranchId != 1) {
+        $query->where('services.branch_id', $sessionBranchId);
+    }
+
+    $query->select(
+        'services.svc_id',
+        'services.svc_sa_number',
+        'services.svc_is_termite',
+        'services.svc_is_package',
+        'services.svc_status',
+        'services.svc_payment_status',
+        'services.svc_date_created',
+        'users.usr_first_name',
+        'users.usr_last_name',
+        'users.usr_email',
+        'users.usr_mobile',
+        'branches.branch_name',
+        'service_appointments.svca_approved_date',
+        'service_appointments.svca_approved_time_from',
+        'service_appointments.svca_approved_time_to'
+    );
+
+    // Search
+    if (!empty($search)) {
+        $query->where(function ($q) use ($search) {
+            $q->where('users.usr_first_name', 'LIKE', "%$search%")
+                ->orWhere('users.usr_last_name', 'LIKE', "%$search%")
+                ->orWhere('users.usr_email', 'LIKE', "%$search%")
+                ->orWhere('users.usr_mobile', 'LIKE', "%$search%")
+                ->orWhere('branches.branch_name', 'LIKE', "%$search%");
+        });
+    }
+
+    $query->orderBy('services.svc_date_created', 'asc');
+
+    $appointments = $query->paginate(50);
+
+    return view('service_orders.appointments.assessed.assessed', compact('appointments', 'search'));
+}
+
+@extends('layouts.themes.main')
+
+@section('content')
+    {{-- Content Header --}}
+    <div class="content-header">
+        <div class="container-fluid">
+            <div class="row mb-2">
+                <div class="col-sm-6">
+                    <h1 class="m-0">Assessed Appointments</h1>
+                </div>
+                <div class="col-sm-6">
+                    <ol class="breadcrumb float-sm-right">
+                        <li class="breadcrumb-item">
+                            <a href="{{ action('App\Http\Controllers\AdminController@home') }}">Home</a>
+                        </li>
+                        <li class="breadcrumb-item">Appointments</li>
+                        <li class="breadcrumb-item active">Assessed</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- Main Content --}}
+    <section class="content">
+        @include('layouts.partials.onclick')
+        @include('layouts.partials.alerts')
+        @include('layouts.partials.modal_style')
+        <div class="container-fluid">
+            <div class="card">
+                <div class="card-body overflow-auto">
+                    <div class="row">
+                        <!-- Table Column -->
+                        <div class="col-lg-12 col-md-7">
+                            <form method="GET" action="{{ url('service/orders/appointments/assessed') }}" class="mb-3">
+                                <div class="input-group">
+                                    <input type="text" name="search" id="searchInput" class="form-control"
+                                        placeholder="Search client..." value="{{ request('search') }}">
+                                    <div class="input-group-append">
+                                        <button type="submit" class="btn btn-primary">
+                                            <span class="fa fa-search"></span> Search
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+
+                            <table id="profilingTable" class="table table-hover table-bordered table-sm responsive">
+                                <thead>
+                                    <tr>
+                                        <th class="text-center">SA Number</th>
+                                        <th class="text-center">Client</th>
+                                        <th class="text-center">Mobile Number</th>
+                                        <th class="text-center">Branch</th>
+                                        <th class="text-center">Is Termite</th>
+                                        <th class="text-center">Is Package</th>
+                                        <th class="text-center">Payment Status</th>
+                                        <th class="text-center">Approved Date</th>
+                                        <th class="text-center">Approved Time</th>
+                                        <th class="text-center">Status</th>
+                                        <th class="text-center">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach ($appointments as $appointment)
+                                        <tr>
+                                            <td style="vertical-align: middle; text-align: center">
+                                                SA-{{ str_pad($appointment->svc_sa_number, 6, '0', STR_PAD_LEFT) }}
+                                            </td>
+                                            <td style="vertical-align: middle; text-align: center">
+                                                {{ $appointment->usr_last_name }}, {{ $appointment->usr_first_name }}
+                                            </td>
+                                            <td style="vertical-align: middle; text-align: center">
+                                                {{ $appointment->usr_mobile }}
+                                            </td>
+                                            <td style="vertical-align: middle; text-align: center">
+                                                {{ $appointment->branch_name }}
+                                            </td>
+                                            <td style="vertical-align: middle; text-align: center">
+                                                @if ($appointment->svc_is_termite == 1)
+                                                    YES
+                                                @else
+                                                    NO
+                                                @endif
+                                            </td>
+                                            <td style="vertical-align: middle; text-align: center">
+                                                @if ($appointment->svc_is_package == 1)
+                                                    YES
+                                                @else
+                                                    NO
+                                                @endif
+                                            </td>
+                                            <td style="vertical-align: middle; text-align: center">
+                                                {{ $appointment->svc_payment_status }}
+                                            </td>
+                                            <td style="vertical-align: middle; text-align: center">
+                                                {{ \Carbon\Carbon::parse($appointment->svca_approved_date)->format('m/d/Y | h:i A') }}
+                                            </td>
+                                            <td style="vertical-align: middle; text-align: center">
+                                                {{ \Carbon\Carbon::parse($appointment->svca_approved_time_from)->format('h:iA') }}
+                                                -
+                                                {{ \Carbon\Carbon::parse($appointment->svca_approved_time_to)->format('h:iA') }}
+                                            </td>
+                                            <td style="vertical-align: middle; text-align: center">
+                                                {{ $appointment->svc_status }}
+                                            </td>
+                                            <td style="vertical-align: middle; text-align: center">
+                                                <a class="btn btn-primary btn-sm mb-1"
+                                                    href="{{ url('service/orders/appointments/assessed/' . $appointment->svc_id) }}">
+                                                    <span class="fa fa-eye"></span>
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    
+    {{-- Dynamic Search While Typing --}}
+    <script>
+        document.getElementById("searchInput").addEventListener("keyup", function() {
+            let value = this.value.toLowerCase();
+
+            // Select all tables with ID containing "Table"
+            let tables = document.querySelectorAll('table[id*="Table"]');
+
+            tables.forEach(function(table) {
+                let rows = table.querySelectorAll("tbody tr");
+
+                rows.forEach(function(row) {
+                    let text = row.innerText.toLowerCase();
+                    row.style.display = text.includes(value) ? "" : "none";
+                });
+            });
+        });
+    </script>
+@endsection
+
+can you combine the assessed in the scheduled? so what I want the scheduled is as is, the assessed rows will be on the left size (color white bars) depending on the date, displayed
+
+so if i click it it will redirect to the assessed (already in the code)
+
+so in my current filter date (if scheduled it is the only clickable right)
+
+since we add new status, it should have date and a small exponent exclamation mark (for those assessed) so that the user will know that, that date it has unassigned
+
+so in the left side, a header UNASSIGNED, then display white bars (rows) single bars
+
+ps dont touch existing scheduled, just add
