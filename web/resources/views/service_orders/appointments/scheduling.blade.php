@@ -86,8 +86,8 @@
                                 {{ \Carbon\Carbon::parse($tlDate)->format('l, F d, Y') }}
                             </span>
 
-                            <form method="GET" action="{{ url('service/orders/appointments/scheduling') }}" id="tlDateForm"
-                                class="d-flex align-items-center" style="gap:6px;">
+                            <form method="GET" action="{{ url('service/orders/appointments/scheduling') }}"
+                                id="tlDateForm" class="d-flex align-items-center" style="gap:6px;">
                                 <input type="hidden" name="view" value="timeline">
                                 <input type="text" name="tl_date" id="tlDatePicker" value="{{ $tlDate }}"
                                     class="form-control form-control-sm" style="width:150px;" placeholder="Pick a date"
@@ -502,9 +502,41 @@
                                     }
 
                                     // Assessed bars
-                                    ASSESSED_DATA.forEach(row => {
+                                    const lanes = [];
+                                    const laned = ASSESSED_DATA.map(row => {
+                                        const frm = parseTm(row.from);
+                                        const to_ = parseTm(row.to);
+                                        let laneIdx = 0;
+                                        let placed = false;
+                                        for (let i = 0; i < lanes.length; i++) {
+                                            if (lanes[i] <= frm) {
+                                                lanes[i] = to_;
+                                                laneIdx = i;
+                                                placed = true;
+                                                break;
+                                            }
+                                        }
+                                        if (!placed) {
+                                            laneIdx = lanes.length;
+                                            lanes.push(to_);
+                                        }
+                                        return {
+                                            ...row,
+                                            lane: laneIdx
+                                        };
+                                    });
+
+                                    const numLanes = Math.max(1, lanes.length);
+                                    uTrack.style.height = (numLanes * ROW_H) + 'px';
+
+                                    laned.forEach(row => {
                                         const blk = makeAssessedBlock(row);
-                                        if (blk) uTrack.appendChild(blk);
+                                        if (blk) {
+                                            blk.style.top = (row.lane * ROW_H + 4) + 'px';
+                                            blk.style.bottom = 'auto';
+                                            blk.style.height = (ROW_H - 8) + 'px';
+                                            uTrack.appendChild(blk);
+                                        }
                                     });
 
                                     uRowWrap.appendChild(uTrack);
