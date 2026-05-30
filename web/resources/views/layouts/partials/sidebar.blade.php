@@ -138,18 +138,10 @@
                             </li>
 
                             <li class="nav-item">
-                                <a href="{{ action('App\Http\Controllers\AppointmentController@assessed_appointments') }}"
-                                    class="nav-link {{ request()->is('service/orders/appointments/assessed*') ? 'active' : '' }}">
+                                <a href="{{ action('App\Http\Controllers\AppointmentController@scheduling_appointments') }}"
+                                    class="nav-link {{ request()->is('service/orders/appointments/scheduling*') ? 'active' : '' }}">
                                     <i class="far fa-circle nav-icon"></i>
-                                    <p>ASSESSED</p>
-                                </a>
-                            </li>
-
-                            <li class="nav-item">
-                                <a href="{{ action('App\Http\Controllers\AppointmentController@scheduled_appointments') }}"
-                                    class="nav-link {{ request()->is('service/orders/appointments/scheduled*') ? 'active' : '' }}">
-                                    <i class="far fa-circle nav-icon"></i>
-                                    <p>SCHEDULED</p>
+                                    <p>SCHEDULING</p>
                                 </a>
                             </li>
 
