@@ -93,6 +93,13 @@
                                     class="form-control form-control-sm" style="width:150px;" placeholder="Pick a date"
                                     readonly>
                             </form>
+
+                            {{-- View filter dropdown --}}
+                            <select id="tlViewFilter" class="form-control form-control-sm" style="width:auto;">
+                                <option value="all">All</option>
+                                <option value="scheduled">Scheduled</option>
+                                <option value="unassigned">Unassigned</option>
+                            </select>
                         </div>
 
                         {{-- Next day --}}
@@ -457,6 +464,7 @@
                                     // Section header row
                                     const uHeader = document.createElement('div');
                                     uHeader.style.cssText = 'display:flex;align-items:center;margin-bottom:4px;';
+                                    uHeader.setAttribute('data-tl-section', 'unassigned'); // ← ADDED
 
                                     const uHeaderLabel = document.createElement('div');
                                     uHeaderLabel.style.cssText = [
@@ -473,9 +481,10 @@
                                     uHeader.appendChild(uHeaderLine);
                                     container.appendChild(uHeader);
 
-                                    // Single track row — spacer replaces the removed "Assessed" label
+                                    // Single track row
                                     const uRowWrap = document.createElement('div');
                                     uRowWrap.style.cssText = 'display:flex;align-items:center;margin-bottom:8px;';
+                                    uRowWrap.setAttribute('data-tl-section', 'unassigned'); // ← ADDED
 
                                     const uSpacer = document.createElement('div');
                                     uSpacer.style.cssText = `flex:none;width:${LABEL_W}px;`;
@@ -545,10 +554,11 @@
                                     // Divider before scheduled rows
                                     const divider = document.createElement('div');
                                     divider.style.cssText = 'border-top:1px solid #e0e0e0;margin-bottom:8px;';
+                                    divider.setAttribute('data-tl-section', 'unassigned'); // ← ADDED
                                     container.appendChild(divider);
                                 }
 
-                                /* Scheduled rows (unchanged) */
+                                /* Scheduled rows */
                                 if (!DATA.length) return;
 
                                 const techs = [...new Set(DATA.map(r => r.tech))].sort();
@@ -558,6 +568,7 @@
 
                                     const rowWrap = document.createElement('div');
                                     rowWrap.style.cssText = 'display:flex;align-items:center;margin-bottom:4px;';
+                                    rowWrap.setAttribute('data-tl-section', 'scheduled'); // ← ADDED
 
                                     const label = document.createElement('div');
                                     label.style.cssText = [
@@ -602,6 +613,44 @@
                             document.addEventListener('DOMContentLoaded', buildTimeline);
                             if (document.readyState !== 'loading') buildTimeline();
 
+                        })();
+                    </script>
+
+                    <script>
+                        (function() {
+                            document.addEventListener('DOMContentLoaded', function() {
+                                const sel = document.getElementById('tlViewFilter');
+                                if (!sel) return;
+                                sel.addEventListener('change', function() {
+                                    applyFilter(this.value);
+                                });
+                            });
+
+                            window.applyFilter = function(val) {
+                                const container = document.getElementById('tlContainer');
+                                if (!container) return;
+
+                                container.querySelectorAll('[data-tl-section]').forEach(function(el) {
+                                    const section = el.getAttribute('data-tl-section');
+                                    const isDivider = el.style.cssText.includes('border-top');
+
+                                    if (val === 'all') {
+                                        el.style.display = isDivider ? '' : 'flex';
+                                    } else if (val === 'scheduled') {
+                                        if (section === 'scheduled') {
+                                            el.style.display = 'flex';
+                                        } else {
+                                            el.style.display = 'none';
+                                        }
+                                    } else if (val === 'unassigned') {
+                                        if (section === 'unassigned') {
+                                            el.style.display = isDivider ? '' : 'flex';
+                                        } else {
+                                            el.style.display = 'none';
+                                        }
+                                    }
+                                });
+                            };
                         })();
                     </script>
 
