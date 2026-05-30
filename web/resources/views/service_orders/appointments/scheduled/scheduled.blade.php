@@ -1,7 +1,7 @@
 @extends('layouts.themes.main')
 
 @section('content')
-    {{-- ── Flatpickr CSS ────────────────────────────────────────────────────────── --}}
+    {{-- Flatpickr CSS --}}
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
     <style>
         /* Override flatpickr to match Bootstrap/AdminLTE look */
@@ -26,7 +26,7 @@
         }
     </style>
 
-    {{-- ── Content Header ──────────────────────────────────────────────────────── --}}
+    {{-- Content Header --}}
     <div class="content-header">
         <div class="container-fluid">
             <div class="row mb-2">
@@ -46,7 +46,7 @@
         </div>
     </div>
 
-    {{-- ── Main Content ─────────────────────────────────────────────────────────── --}}
+    {{-- Main Content --}}
     <section class="content">
         @include('layouts.partials.onclick')
         @include('layouts.partials.alerts')
@@ -55,7 +55,7 @@
         <div class="container-fluid">
             <div class="card">
 
-                {{-- ── Card Header: title + toggle ─────────────────────────────── --}}
+                {{-- Card Header: title + toggle --}}
                 <div class="card-header d-flex align-items-center justify-content-between flex-wrap" style="gap:10px;">
                     <h3 class="card-title mb-0">
                         <i class="far fa-calendar-alt mr-1"></i>
@@ -187,7 +187,7 @@
                     <script>
                         (function() {
 
-                            /* ── Config ──────────────────────────────────────── */
+                            /* Config */
                             const HOURS_S = 0; // timeline start hour (12am)
                             const HOURS_E = 23; // timeline end hour  (11pm)
                             const TOTAL = HOURS_E - HOURS_S;
@@ -197,7 +197,7 @@
 
                             const DATA = @json($tlDataForJs);
 
-                            /* ── Helpers ─────────────────────────────────────── */
+                            /* Helpers */
                             function parseTm(s) {
                                 if (!s) return null;
                                 const p = s.split(':');
@@ -217,7 +217,7 @@
                                 return h12 + (m !== '00' ? ':' + m : '') + ' ' + ampm;
                             }
 
-                            /* ── Tooltip ─────────────────────────────────────── */
+                            /* Tooltip */
                             let tt = null;
 
                             function ensureTT() {
@@ -256,7 +256,7 @@
                                 if (tt) tt.style.display = 'none';
                             }
 
-                            /* ── Build block ─────────────────────────────────── */
+                            /* Build block */
                             function makeBlock(row) {
                                 const frm = parseTm(row.from);
                                 const to_ = parseTm(row.to);
@@ -329,7 +329,7 @@
                                 return blk;
                             }
 
-                            /* ── Build timeline ──────────────────────────────── */
+                            /* Build timeline */
                             function buildTimeline() {
                                 const container = document.getElementById('tlContainer');
                                 if (!container || !DATA.length) return;
@@ -423,15 +423,8 @@
 
                         })();
                     </script>
-                    {{-- end view toggle --}}
-
                 </div>
-                {{-- /.card-body --}}
-
             </div>
-            {{-- /.card --}}
         </div>
-        {{-- /.container-fluid --}}
-
     </section>
 @endsection
